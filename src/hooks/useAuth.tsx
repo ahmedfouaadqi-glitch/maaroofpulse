@@ -3,7 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 type Role = "super_admin" | "editor" | "subscriber" | "guest";
-type Profile = { id: string; email: string | null; display_name: string | null; plan_slug: string; banned: boolean };
+type Profile = { id: string; email: string | null; display_name: string | null; plan_slug: string; banned: boolean; persona?: string | null };
 type Ctx = { user: User | null; roles: Role[]; profile: Profile | null; loading: boolean; isAdmin: boolean; isStaff: boolean; canViewFull: boolean };
 
 const AuthCtx = createContext<Ctx>({ user: null, roles: [], profile: null, loading: true, isAdmin: false, isStaff: false, canViewFull: false });
@@ -20,7 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!u) { setRoles([]); setProfile(null); setLoading(false); return; }
       const [{ data: r }, { data: p }] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", u.id),
-        supabase.from("profiles").select("id,email,display_name,plan_slug,banned").eq("id", u.id).maybeSingle(),
+        supabase.from("profiles").select("id,email,display_name,plan_slug,banned,persona").eq("id", u.id).maybeSingle(),
       ]);
       setRoles((r ?? []).map((x) => x.role as Role));
       setProfile(p as Profile | null);
