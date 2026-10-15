@@ -46,12 +46,14 @@ function Admin() {
             <TabsTrigger value="sources">Target registry</TabsTrigger>
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             {isAdmin && <TabsTrigger value="plans">Plans</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="countries">Internet users</TabsTrigger>}
             {isAdmin && <TabsTrigger value="settings">Settings & flags</TabsTrigger>}
           </TabsList>
           <TabsContent value="content"><ContentTab /></TabsContent>
           <TabsContent value="sources"><SourcesTab /></TabsContent>
           {isAdmin && <TabsContent value="users"><UsersTab /></TabsContent>}
           {isAdmin && <TabsContent value="plans"><PlansTab /></TabsContent>}
+          {isAdmin && <TabsContent value="countries"><CountriesTab /></TabsContent>}
           {isAdmin && <TabsContent value="settings"><SettingsTab /></TabsContent>}
         </Tabs>
       </main>
@@ -94,12 +96,12 @@ function ContentTab() {
         {(runs ?? []).map((r) => <div key={r.id} className="flex gap-3 text-muted-foreground"><span>{new Date(r.started_at).toLocaleString()}</span><Badge variant="secondary">{r.status}</Badge><span>{r.signals_created} signals</span></div>)}
       </div>
       <Table>
-        <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Kind</TableHead><TableHead>Region</TableHead><TableHead>Score</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Kind</TableHead><TableHead>Platform</TableHead><TableHead>Region</TableHead><TableHead>Score</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
         <TableBody>
           {(signals ?? []).map((s) => (
             <TableRow key={s.id}>
               <TableCell className="max-w-md">{s.title}</TableCell>
-              <TableCell>{s.kind}</TableCell><TableCell>{s.region}</TableCell><TableCell>{s.pulse_score}</TableCell>
+              <TableCell>{s.kind}</TableCell><TableCell>{s.platform ?? "—"}</TableCell><TableCell>{s.region}</TableCell><TableCell>{s.pulse_score}</TableCell>
               <TableCell>
                 <Select value={s.status} onValueChange={(v) => setStatus(s.id, v)}>
                   <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
@@ -118,30 +120,31 @@ function ContentTab() {
 function SourcesTab() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["sources"], queryFn: async () => (await supabase.from("sources").select("*").order("created_at")).data ?? [] });
-  const [f, setF] = useState({ name: "", url: "", kind: "trend", region: "global" });
+  const [f, setF] = useState({ name: "", url: "", kind: "trend", region: "global", platform: "web" });
   const refresh = () => qc.invalidateQueries({ queryKey: ["sources"] });
   async function add(e: React.FormEvent) {
     e.preventDefault();
     const { error } = await supabase.from("sources").insert(f);
     if (error) { toast.error(error.message); return; }
-    setF({ name: "", url: "", kind: "trend", region: "global" }); refresh();
+    setF({ name: "", url: "", kind: "trend", region: "global", platform: "web" }); refresh();
   }
   return (
     <div className="mt-6 space-y-6">
-      <form onSubmit={add} className="grid gap-2 md:grid-cols-[1fr_2fr_140px_120px_auto]">
+      <form onSubmit={add} className="grid gap-2 md:grid-cols-[1fr_2fr_120px_130px_110px_auto]">
         <Input required placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input required type="url" placeholder="https://…" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
         <Select value={f.kind} onValueChange={(v) => setF({ ...f, kind: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["trend", "event", "app", "news", "social"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+        <Select value={f.platform} onValueChange={(v) => setF({ ...f, platform: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["x", "youtube", "tiktok", "instagram", "facebook", "threads", "telegram", "linkedin", "google", "google_play", "app_store", "news", "web"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
         <Input placeholder="Region (SA, global)" value={f.region} onChange={(e) => setF({ ...f, region: e.target.value })} />
         <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
       </form>
       <Table>
-        <TableHeader><TableRow><TableHead>Source</TableHead><TableHead>Kind</TableHead><TableHead>Region</TableHead><TableHead>Last crawl</TableHead><TableHead>Active</TableHead><TableHead /></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>Source</TableHead><TableHead>Kind</TableHead><TableHead>Platform</TableHead><TableHead>Region</TableHead><TableHead>Last crawl</TableHead><TableHead>Active</TableHead><TableHead /></TableRow></TableHeader>
         <TableBody>
           {(data ?? []).map((s) => (
             <TableRow key={s.id}>
               <TableCell><div className="font-medium">{s.name}</div><div className="max-w-xs truncate text-xs text-muted-foreground">{s.url}</div></TableCell>
-              <TableCell>{s.kind}</TableCell><TableCell>{s.region}</TableCell>
+              <TableCell>{s.kind}</TableCell><TableCell>{s.platform ?? "—"}</TableCell><TableCell>{s.region}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{s.last_crawled_at ? new Date(s.last_crawled_at).toLocaleString() : "—"}<div>{s.last_status}</div></TableCell>
               <TableCell><Switch checked={s.is_active} onCheckedChange={async (v) => { await supabase.from("sources").update({ is_active: v }).eq("id", s.id); refresh(); }} /></TableCell>
               <TableCell><Button variant="ghost" size="icon" aria-label="Delete" onClick={async () => { await supabase.from("sources").delete().eq("id", s.id); refresh(); }}><Trash2 className="h-4 w-4" /></Button></TableCell>
@@ -241,6 +244,44 @@ function PlansTab() {
           <label className="flex items-center gap-2 text-sm"><Switch checked={p.is_featured} onCheckedChange={(v) => save(p.id, { is_featured: v })} />Featured</label>
         </div>
       ))}
+    </div>
+  );
+}
+
+function CountriesTab() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["admin-country-stats"], queryFn: async () => (await supabase.from("country_stats").select("*").order("code")).data ?? [] });
+  const [n, setN] = useState({ code: "", internet_users: "", population: "", source: "", year: String(new Date().getFullYear()) });
+  async function save(code: string, patch: Record<string, unknown>) {
+    const { error } = await supabase.from("country_stats").upsert({ code, ...patch, updated_at: new Date().toISOString() } as never);
+    if (error) toast.error(error.message); else toast.success("Saved");
+    qc.invalidateQueries({ queryKey: ["admin-country-stats"] });
+  }
+  const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[, ]/g, "")));
+  return (
+    <div className="mt-6 space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); if (!/^[A-Z]{2}$/.test(n.code)) { toast.error("Code must be 2 letters, e.g. IQ"); return; } save(n.code, { internet_users: num(n.internet_users), population: num(n.population), source: n.source || null, year: num(n.year) }); setN({ ...n, code: "", internet_users: "", population: "" }); }} className="grid gap-2 md:grid-cols-[90px_1fr_1fr_1fr_90px_auto]">
+        <Input placeholder="IQ" value={n.code} onChange={(e) => setN({ ...n, code: e.target.value.toUpperCase().slice(0, 2) })} />
+        <Input placeholder="Internet users" value={n.internet_users} onChange={(e) => setN({ ...n, internet_users: e.target.value })} />
+        <Input placeholder="Population" value={n.population} onChange={(e) => setN({ ...n, population: e.target.value })} />
+        <Input placeholder="Source" value={n.source} onChange={(e) => setN({ ...n, source: e.target.value })} />
+        <Input placeholder="Year" value={n.year} onChange={(e) => setN({ ...n, year: e.target.value })} />
+        <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
+      </form>
+      <Table>
+        <TableHeader><TableRow><TableHead>Country</TableHead><TableHead>Internet users</TableHead><TableHead>Population</TableHead><TableHead>Source</TableHead><TableHead>Year</TableHead></TableRow></TableHeader>
+        <TableBody>
+          {(data ?? []).map((c) => (
+            <TableRow key={c.code}>
+              <TableCell className="font-medium">{c.code}</TableCell>
+              <TableCell><Input className="w-36" defaultValue={c.internet_users ?? ""} onBlur={(e) => save(c.code, { internet_users: num(e.target.value) })} /></TableCell>
+              <TableCell><Input className="w-36" defaultValue={c.population ?? ""} onBlur={(e) => save(c.code, { population: num(e.target.value) })} /></TableCell>
+              <TableCell><Input defaultValue={c.source ?? ""} onBlur={(e) => save(c.code, { source: e.target.value || null })} /></TableCell>
+              <TableCell><Input className="w-20" defaultValue={c.year ?? ""} onBlur={(e) => save(c.code, { year: num(e.target.value) })} /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
