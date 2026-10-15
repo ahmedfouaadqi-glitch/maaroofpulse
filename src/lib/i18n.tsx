@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import type React from "react";
 
 export type Lang = "en" | "ar";
 type Theme = "dark" | "light";
@@ -89,7 +90,8 @@ const dict = {
 export type Key = keyof typeof dict.en;
 
 type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (k: Key) => string; theme: Theme; toggleTheme: () => void };
-const I18nCtx = createContext<Ctx | null>(null);
+const g = globalThis as unknown as { __pulseI18nCtx?: React.Context<Ctx | null> };
+const I18nCtx = (g.__pulseI18nCtx ??= createContext<Ctx | null>(null));
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
