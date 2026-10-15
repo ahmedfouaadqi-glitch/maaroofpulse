@@ -194,8 +194,11 @@ export type Database = {
           source_url: string | null
           status: string
           summary: string | null
+          summary_ar: string | null
           title: string
+          title_ar: string | null
           why_rising: string | null
+          why_rising_ar: string | null
         }
         Insert: {
           category?: string | null
@@ -214,8 +217,11 @@ export type Database = {
           source_url?: string | null
           status?: string
           summary?: string | null
+          summary_ar?: string | null
           title: string
+          title_ar?: string | null
           why_rising?: string | null
+          why_rising_ar?: string | null
         }
         Update: {
           category?: string | null
@@ -234,8 +240,11 @@ export type Database = {
           source_url?: string | null
           status?: string
           summary?: string | null
+          summary_ar?: string | null
           title?: string
+          title_ar?: string | null
           why_rising?: string | null
+          why_rising_ar?: string | null
         }
         Relationships: [
           {
@@ -334,6 +343,20 @@ export type Database = {
     }
     Functions: {
       can_view_full: { Args: { _user_id: string }; Returns: boolean }
+      get_limited_signals: {
+        Args: { _kind?: string; _region?: string }
+        Returns: {
+          category: string
+          created_at: string
+          id: string
+          kind: string
+          momentum: string
+          pulse_score: number
+          region: string
+          title: string
+          title_ar: string
+        }[]
+      }
       get_teaser_signals: {
         Args: { _region?: string }
         Returns: {

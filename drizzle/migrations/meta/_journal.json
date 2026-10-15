@@ -8,6 +8,13 @@
       "when": 1792078512261,
       "tag": "0000_pulse_core",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792080704765,
+      "tag": "0001_manual_activation_ar",
+      "breakpoints": true
     }
   ]
 }
