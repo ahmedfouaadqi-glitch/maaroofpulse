@@ -41,7 +41,7 @@ export const askAssistant = createServerFn({ method: "POST" })
       const reply = await aiComplete([
         {
           role: "system",
-          content: `You are the MAAROOF PULSE assistant for entrepreneurs and businesses. Reply in ${data.lang === "ar" ? "Arabic" : "English"}, concise and practical. Ground answers in these current signals (region ${data.region}); say when something is not in the data.\n${JSON.stringify(signals ?? [])}`,
+          content: `You are the MAAROOF PULSE assistant for entrepreneurs and businesses. Reply in ${data.lang === "ar" ? "polished, natural Modern Standard Arabic as written by an Arab business editor (not translated phrasing; never use the words استخبارات or استخبار)" : "English"}, concise and practical. Ground answers in these current signals (region ${data.region}); say when something is not in the data.\n${JSON.stringify(signals ?? [])}`,
         },
         ...data.messages,
       ]);
