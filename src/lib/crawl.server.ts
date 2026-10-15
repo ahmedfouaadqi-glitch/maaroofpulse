@@ -52,7 +52,7 @@ pulse_score (0-100 strength), lead_time_hours (estimated hours before mainstream
 momentum ("emerging" | "rising" | "surging"),
 url (absolute link to the item if present), location (venue/city for events or null),
 event_date (ISO date for events or null), register_url (registration/ticket link or null).
-platform: where this item lives — one of ${PLATFORMS.join(", ")} (use the real platform only when the page proves it; default "${"${src.platform ?? \"web\"}"}"),
+platform: where this item lives — one of ${PLATFORMS.join(", ")} (use the real platform only when the page proves it; default "${src.platform ?? "web"}"),
 ${INSIGHT_RULES}
 Only include real items present in the page — never invent items, numbers or links. No markdown.`;
   const text = await aiComplete(
