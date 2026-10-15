@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SignalCard, type Signal } from "@/components/SignalCard";
+import { SignalCard, PLATFORM_KEYS, type Signal } from "@/components/SignalCard";
 import { RegionPicker } from "@/components/RegionPicker";
 import { ConnectivityCard } from "@/components/ConnectivityCard";
 import { useI18n, type Key } from "@/lib/i18n";
@@ -37,6 +37,7 @@ function Dashboard() {
   const { lang } = useI18n();
   const { region, setRegion, useGps } = useRegion();
   const [kind, setKind] = useState("all");
+  const [platform, setPlatform] = useState("all");
 
   const limited = useQuery({
     queryKey: ["limited-signals", region, kind],
@@ -66,7 +67,7 @@ function Dashboard() {
 
   if (profile?.banned) return (<div className="min-h-screen"><SiteHeader /><p className="p-16 text-center">{t("banned")}</p></div>);
 
-  const list = ((canViewFull ? signals.data : limited.data) ?? []).slice().sort((a, b) => b.pulse_score - a.pulse_score);
+  const list = ((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).slice().sort((a, b) => b.pulse_score - a.pulse_score);
   return (
     <div className="min-h-screen">
       <SiteHeader />
@@ -90,6 +91,13 @@ function Dashboard() {
               {["trend", "event", "app", "news", "social"].map((k) => <TabsTrigger key={k} value={k}>{t(`kind_${k}` as Key)}</TabsTrigger>)}
             </TabsList>
           </Tabs>
+          {canViewFull && (kind === "social" || kind === "all") && (
+            <div className="-mt-3 mb-6 flex flex-wrap gap-2">
+              {["all", ...PLATFORM_KEYS.filter((p) => (signals.data ?? []).some((x) => x.platform === p))].map((p) => (
+                <Button key={p} size="sm" variant={platform === p ? "default" : "outline"} onClick={() => setPlatform(p)}>{p === "all" ? t("all_platforms") : t(`pf_${p}` as Key)}</Button>
+              ))}
+            </div>
+          )}
           {list.length === 0 && !signals.isLoading && <p className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">{t("d_empty")}</p>}
           <div className="grid gap-4 md:grid-cols-2">
             {list.map((s) => <SignalCard key={s.id} s={s} compact={!canViewFull} />)}
@@ -127,13 +135,19 @@ function Assistant({ region }: { region: string }) {
   const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const { profile } = useAuth();
+  const [persona, setPersonaState] = useState<string>((profile as { persona?: string } | null)?.persona ?? "citizen");
+  async function setPersona(p: string) {
+    setPersonaState(p);
+    if (profile?.id) await supabase.from("profiles").update({ persona: p }).eq("id", profile.id);
+  }
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || busy) return;
     const next = [...msgs, { role: "user" as const, content: input.trim() }];
     setMsgs(next); setInput(""); setBusy(true);
     try {
-      const r = await ask({ data: { messages: next, region, lang } });
+      const r = await ask({ data: { messages: next, region, lang, persona } });
       if ("error" in r && r.error) toast.error(r.error);
       else if ("reply" in r) setMsgs([...next, { role: "assistant", content: r.reply }]);
     } catch (err) { toast.error(err instanceof Error ? err.message : "Error"); }
@@ -142,6 +156,12 @@ function Assistant({ region }: { region: string }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
       <h2 className="font-semibold">{t("d_assistant")}</h2>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="text-muted-foreground">{t("persona")}:</span>
+        {["merchant", "creator", "investor", "developer", "citizen"].map((p) => (
+          <button key={p} type="button" onClick={() => setPersona(p)} className={`rounded-full border px-2.5 py-1 ${persona === p ? "border-pulse bg-pulse/15 text-pulse" : "border-border text-muted-foreground"}`}>{t(`p_${p}` as Key)}</button>
+        ))}
+      </div>
       <div className="mt-4 max-h-80 space-y-3 overflow-y-auto text-sm">
         {msgs.map((m, i) => (
           <div key={i} className={m.role === "user" ? "ms-8 rounded-xl bg-primary/15 p-3" : "me-8 whitespace-pre-wrap rounded-xl bg-muted p-3"}>{m.content}</div>
@@ -157,16 +177,16 @@ function Assistant({ region }: { region: string }) {
 }
 
 function GeoIndex() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const check = useServerFn(runGeoCheck);
   const [brand, setBrand] = useState("");
   const [market, setMarket] = useState("");
   const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState<{ overall: number; summary: string; tips: string[]; models: { name: string; score: number; note: string }[] } | null>(null);
+  const [res, setRes] = useState<{ overall: number; summary: string; cta?: string; models: { name: string; score: number; note: string }[] } | null>(null);
   async function go(e: React.FormEvent) {
     e.preventDefault(); setBusy(true);
     try {
-      const r = await check({ data: { brand, market } });
+      const r = await check({ data: { brand, market, lang } });
       if ("error" in r && r.error) toast.error(r.error); else if ("result" in r && r.result) setRes(r.result);
     } catch (err) { toast.error(err instanceof Error ? err.message : "Error"); }
     setBusy(false);
@@ -189,7 +209,7 @@ function GeoIndex() {
               <div className="mt-1 h-1.5 rounded-full bg-muted"><div className="h-full rounded-full bg-pulse" style={{ width: `${m.score}%` }} /></div>
             </div>
           ))}
-          <ul className="list-disc space-y-1 ps-5">{res.tips?.map((x) => <li key={x}>{x}</li>)}</ul>
+          {res.cta && <a href="https://maaroofai.com" target="_blank" rel="noreferrer" className="block rounded-xl border border-pulse/40 bg-pulse/10 p-3 hover:bg-pulse/20">{res.cta}</a>}
         </div>
       )}
     </div>
