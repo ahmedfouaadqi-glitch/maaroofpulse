@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SignalCard, type Signal } from "@/components/SignalCard";
 import { RegionPicker } from "@/components/RegionPicker";
+import { ConnectivityCard } from "@/components/ConnectivityCard";
 import { useI18n, type Key } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
 import { useRegion } from "@/hooks/useRegion";
@@ -81,11 +82,12 @@ function Dashboard() {
               <p className="mt-1 text-sm text-muted-foreground">{t("pending_sub")}</p>
             </div>
           )}
+          <ConnectivityCard region={region} />
           <RefreshInfo last={lastRun.data ?? null} lang={lang} />
           <Tabs value={kind} onValueChange={setKind} className="mb-6">
             <TabsList>
               <TabsTrigger value="all">{t("d_all")}</TabsTrigger>
-              {["trend", "event", "app", "news"].map((k) => <TabsTrigger key={k} value={k}>{t(`kind_${k}` as Key)}</TabsTrigger>)}
+              {["trend", "event", "app", "news", "social"].map((k) => <TabsTrigger key={k} value={k}>{t(`kind_${k}` as Key)}</TabsTrigger>)}
             </TabsList>
           </Tabs>
           {list.length === 0 && !signals.isLoading && <p className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">{t("d_empty")}</p>}

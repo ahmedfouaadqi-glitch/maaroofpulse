@@ -35,6 +35,33 @@ export type Database = {
         }
         Relationships: []
       }
+      country_stats: {
+        Row: {
+          code: string
+          internet_users: number | null
+          population: number | null
+          source: string | null
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          code: string
+          internet_users?: number | null
+          population?: number | null
+          source?: string | null
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          code?: string
+          internet_users?: number | null
+          population?: number | null
+          source?: string | null
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
       crawl_runs: {
         Row: {
           error: string | null
@@ -343,6 +370,14 @@ export type Database = {
     }
     Functions: {
       can_view_full: { Args: { _user_id: string }; Returns: boolean }
+      get_cycle_activity: {
+        Args: { _region?: string }
+        Returns: {
+          current_count: number
+          kind: string
+          previous_count: number
+        }[]
+      }
       get_limited_signals: {
         Args: { _kind?: string; _region?: string }
         Returns: {
@@ -368,6 +403,7 @@ export type Database = {
           pulse_score: number
           region: string
           title: string
+          title_ar: string
         }[]
       }
       has_role: {

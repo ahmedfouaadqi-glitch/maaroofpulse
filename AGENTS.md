@@ -12,6 +12,7 @@
 ## MAAROOF PULSE architecture
 - Roles live in `public.user_roles` (super_admin/editor/subscriber/guest); checks go through security-definer SQL fns (`has_role`, `is_staff`, `can_view_full`) — avoids RLS recursion and privilege escalation.
 - Visitors read teasers only via the `get_teaser_signals` RPC; the full `signals` table is RLS-gated to subscribers/staff.
-- Crawling (Firecrawl direct API + AI extraction) lives in `src/lib/crawl.server.ts`; cron fires every 5 min during hours 00 and 12 UTC, each call crawling 2 stale sources, so every source refreshes once per 12h window within request time limits.
+- Crawling (Firecrawl direct API + AI extraction) lives in `src/lib/crawl.server.ts`; cron fires every 5 min during hours 00 and 12 UTC, each call crawling 3 stale sources then backfilling missing Arabic copies, so every source refreshes once per 12h window within request time limits.
 - UI strings live in `src/lib/i18n.tsx` (en/ar dictionary); add both languages for every new key.
 - New signups get the guest role (limited RPC view); only admins grant subscriber — keeps full access manual.
+- Signal kinds: trend/event/app/news/social; per-country sources (App Store RSS, Google News, trends24) live in `sources`; internet-user counts are annual estimates in `country_stats`, cycle activity comes from the `get_cycle_activity` RPC — no fabricated live counters.

@@ -131,7 +131,7 @@ function SourcesTab() {
       <form onSubmit={add} className="grid gap-2 md:grid-cols-[1fr_2fr_140px_120px_auto]">
         <Input required placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input required type="url" placeholder="https://…" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
-        <Select value={f.kind} onValueChange={(v) => setF({ ...f, kind: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["trend", "event", "app", "news"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+        <Select value={f.kind} onValueChange={(v) => setF({ ...f, kind: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["trend", "event", "app", "news", "social"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
         <Input placeholder="Region (SA, global)" value={f.region} onChange={(e) => setF({ ...f, region: e.target.value })} />
         <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
       </form>

@@ -32,7 +32,8 @@ async function extract(src: Source, markdown: string): Promise<Extracted[]> {
 Return JSON: {"items":[...]} with up to 6 items. Each item:
 title (short, English), summary (1-2 sentences), why_rising (why it is gaining momentum),
 title_ar, summary_ar, why_rising_ar: the same content written natively in polished Modern Standard Arabic as an Arab business editor would write it (not a literal translation; never use the words استخبارات or استخبار),
-category (e.g. Tech, Business, Culture, Sports, Entertainment, Apps, Events),
+category (e.g. Tech, Business, Culture, Sports, Entertainment, Apps, Events, Social),
+For social trend pages, each item is a trending hashtag/topic: explain what it is about and why people are talking about it.
 pulse_score (0-100 strength), lead_time_hours (estimated hours before mainstream coverage, 0-72),
 momentum ("emerging" | "rising" | "surging"),
 url (absolute link to the item if present), location (venue/city for events or null),
@@ -113,4 +114,25 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
     }).eq("id", run.id);
   }
   return { sources: sources.length, created, errors };
+}
+
+export async function backfillArabic(limit = 15) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: rows } = await supabaseAdmin.from("signals").select("id,title,summary,why_rising").is("title_ar", null).order("created_at", { ascending: false }).limit(limit);
+  if (!rows?.length) return 0;
+  const text = await aiComplete(
+    [
+      { role: "system", content: `Rewrite each item natively in polished Modern Standard Arabic as an Arab business editor would (not a literal translation; never use the words استخبارات or استخبار). Return JSON {"items":[{"id","title_ar","summary_ar","why_rising_ar"}]}. No markdown.` },
+      { role: "user", content: JSON.stringify(rows) },
+    ],
+    { json: true },
+  );
+  const out = parseJson<{ items?: { id: string; title_ar?: string; summary_ar?: string; why_rising_ar?: string }[] }>(text)?.items ?? [];
+  let n = 0;
+  for (const i of out) {
+    if (!i?.id || !i.title_ar || !rows.some((r) => r.id === i.id)) continue;
+    await supabaseAdmin.from("signals").update({ title_ar: i.title_ar.slice(0, 200), summary_ar: i.summary_ar ?? null, why_rising_ar: i.why_rising_ar ?? null }).eq("id", i.id);
+    n++;
+  }
+  return n;
 }
