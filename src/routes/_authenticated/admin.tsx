@@ -123,7 +123,7 @@ function SourcesTab() {
   async function add(e: React.FormEvent) {
     e.preventDefault();
     const { error } = await supabase.from("sources").insert(f);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     setF({ name: "", url: "", kind: "trend", region: "global" }); refresh();
   }
   return (
@@ -204,7 +204,7 @@ function UsersTab() {
 function PlansTab() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["admin-plans-full"], queryFn: async () => (await supabase.from("plans").select("*").order("sort_order")).data ?? [] });
-  async function save(id: string, patch: Record<string, unknown>) {
+  async function save(id: string, patch: any) {
     const { error } = await supabase.from("plans").update(patch).eq("id", id);
     if (error) toast.error(error.message); else toast.success("Saved");
     qc.invalidateQueries();

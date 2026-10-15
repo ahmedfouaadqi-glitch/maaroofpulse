@@ -32,7 +32,7 @@ function Landing() {
   const teaser = useQuery({
     queryKey: ["teaser", region],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_teaser_signals", { _region: region === "global" ? undefined : region });
+      const { data, error } = await supabase.rpc("get_teaser_signals", region === "global" ? {} : { _region: region });
       if (error) throw error;
       return (data ?? []) as Signal[];
     },

@@ -53,7 +53,7 @@ function AuthPage() {
     if (error) toast.error(error.message); else toast.success(t("check_email"));
   }
   async function forgot() {
-    if (!email) return toast.error(t("email"));
+    if (!email) { toast.error(t("email")); return; }
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + "/reset-password" });
     if (error) toast.error(error.message); else toast.success(t("reset_sent"));
   }
