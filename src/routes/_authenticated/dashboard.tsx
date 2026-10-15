@@ -41,7 +41,7 @@ function Dashboard() {
     queryKey: ["limited-signals", region, kind],
     enabled: !canViewFull && !loading,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_limited_signals", { _region: region === "global" ? undefined : region, _kind: kind === "all" ? undefined : kind });
+      const { data, error } = await supabase.rpc("get_limited_signals", { ...(region !== "global" ? { _region: region } : {}), ...(kind !== "all" ? { _kind: kind } : {}) });
       if (error) throw error;
       return (data ?? []) as Signal[];
     },
