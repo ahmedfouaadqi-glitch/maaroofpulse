@@ -177,6 +177,7 @@ export type Database = {
           email: string | null
           id: string
           last_seen_at: string | null
+          persona: string | null
           plan_slug: string
         }
         Insert: {
@@ -188,6 +189,7 @@ export type Database = {
           email?: string | null
           id: string
           last_seen_at?: string | null
+          persona?: string | null
           plan_slug?: string
         }
         Update: {
@@ -199,6 +201,7 @@ export type Database = {
           email?: string | null
           id?: string
           last_seen_at?: string | null
+          persona?: string | null
           plan_slug?: string
         }
         Relationships: []
@@ -207,12 +210,16 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          cta_ar: string | null
+          cta_en: string | null
           event_date: string | null
           id: string
           kind: string
           lead_time_hours: number
           map_url: string | null
+          models_view: Json | null
           momentum: string
+          platform: string | null
           pulse_score: number
           region: string
           register_url: string | null
@@ -230,12 +237,16 @@ export type Database = {
         Insert: {
           category?: string | null
           created_at?: string
+          cta_ar?: string | null
+          cta_en?: string | null
           event_date?: string | null
           id?: string
           kind?: string
           lead_time_hours?: number
           map_url?: string | null
+          models_view?: Json | null
           momentum?: string
+          platform?: string | null
           pulse_score?: number
           region?: string
           register_url?: string | null
@@ -253,12 +264,16 @@ export type Database = {
         Update: {
           category?: string | null
           created_at?: string
+          cta_ar?: string | null
+          cta_en?: string | null
           event_date?: string | null
           id?: string
           kind?: string
           lead_time_hours?: number
           map_url?: string | null
+          models_view?: Json | null
           momentum?: string
+          platform?: string | null
           pulse_score?: number
           region?: string
           register_url?: string | null
@@ -292,6 +307,7 @@ export type Database = {
           last_crawled_at: string | null
           last_status: string | null
           name: string
+          platform: string | null
           region: string
           trust_score: number
           url: string
@@ -304,6 +320,7 @@ export type Database = {
           last_crawled_at?: string | null
           last_status?: string | null
           name: string
+          platform?: string | null
           region?: string
           trust_score?: number
           url: string
@@ -316,6 +333,7 @@ export type Database = {
           last_crawled_at?: string | null
           last_status?: string | null
           name?: string
+          platform?: string | null
           region?: string
           trust_score?: number
           url?: string
