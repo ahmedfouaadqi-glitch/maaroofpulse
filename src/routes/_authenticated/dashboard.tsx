@@ -32,10 +32,24 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { t } = useI18n();
-  const { canViewFull, profile } = useAuth();
+  const { canViewFull, profile, loading } = useAuth();
+  const { lang } = useI18n();
   const { region, setRegion, useGps } = useRegion();
   const [kind, setKind] = useState("all");
 
+  const limited = useQuery({
+    queryKey: ["limited-signals", region, kind],
+    enabled: !canViewFull && !loading,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_limited_signals", { _region: region === "global" ? undefined : region, _kind: kind === "all" ? undefined : kind });
+      if (error) throw error;
+      return (data ?? []) as Signal[];
+    },
+  });
+  const lastRun = useQuery({
+    queryKey: ["last-refresh"],
+    queryFn: async () => (await supabase.from("signals").select("created_at").order("created_at", { ascending: false }).limit(1).maybeSingle()).data?.created_at ?? null,
+  });
   const signals = useQuery({
     queryKey: ["signals", region, kind],
     enabled: canViewFull,
@@ -51,7 +65,7 @@ function Dashboard() {
 
   if (profile?.banned) return (<div className="min-h-screen"><SiteHeader /><p className="p-16 text-center">{t("banned")}</p></div>);
 
-  const list = (signals.data ?? []).slice().sort((a, b) => b.pulse_score - a.pulse_score);
+  const list = ((canViewFull ? signals.data : limited.data) ?? []).slice().sort((a, b) => b.pulse_score - a.pulse_score);
   return (
     <div className="min-h-screen">
       <SiteHeader />
@@ -61,6 +75,13 @@ function Dashboard() {
             <h1 className="text-3xl font-bold">{t("d_title")}</h1>
             <RegionPicker region={region} setRegion={setRegion} useGps={useGps} />
           </div>
+          {!canViewFull && !loading && (
+            <div className="mb-6 rounded-2xl border border-pulse/40 bg-pulse/10 p-5">
+              <h2 className="font-semibold text-pulse">{t("pending_title")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t("pending_sub")}</p>
+            </div>
+          )}
+          <RefreshInfo last={lastRun.data ?? null} lang={lang} />
           <Tabs value={kind} onValueChange={setKind} className="mb-6">
             <TabsList>
               <TabsTrigger value="all">{t("d_all")}</TabsTrigger>
@@ -69,15 +90,32 @@ function Dashboard() {
           </Tabs>
           {list.length === 0 && !signals.isLoading && <p className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">{t("d_empty")}</p>}
           <div className="grid gap-4 md:grid-cols-2">
-            {list.map((s) => <SignalCard key={s.id} s={s} />)}
+            {list.map((s) => <SignalCard key={s.id} s={s} compact={!canViewFull} />)}
           </div>
         </section>
         <aside className="space-y-6">
-          <Assistant region={region} />
-          <GeoIndex />
+          {canViewFull && <Assistant region={region} />}
+          {canViewFull && <GeoIndex />}
         </aside>
       </main>
     </div>
+  );
+}
+
+function nextCycle() {
+  const d = new Date(); const n = new Date(d);
+  n.setUTCMinutes(0, 0, 0);
+  n.setUTCHours(d.getUTCHours() < 12 ? 12 : 24);
+  return n;
+}
+
+function RefreshInfo({ last, lang }: { last: string | null; lang: string }) {
+  const { t } = useI18n();
+  const fmt = (x: Date) => x.toLocaleString(lang === "ar" ? "ar" : "en", { dateStyle: "medium", timeStyle: "short" });
+  return (
+    <p className="mb-4 text-xs text-muted-foreground">
+      {last && <>{t("last_update")}: {fmt(new Date(last))} · </>}{t("next_update")}: {fmt(nextCycle())}
+    </p>
   );
 }
 

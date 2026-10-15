@@ -173,13 +173,28 @@ function UsersTab() {
     if (error) toast.error(error.message);
     qc.invalidateQueries({ queryKey: ["admin-users"] });
   }
+  const [pendingOnly, setPendingOnly] = useState(false);
+  async function activate(id: string, on: boolean) {
+    await setRole(id, on ? "subscriber" : "guest");
+    if (on) {
+      const u = users?.find((x) => x.id === id);
+      if (u?.plan_slug === "free") await update(id, { plan_slug: plans?.find((p) => p.slug !== "free")?.slug ?? "free" });
+    } else await update(id, { plan_slug: "free" });
+    toast.success(on ? "Activated" : "Deactivated");
+  }
+  const shown = (users ?? []).filter((u) => !pendingOnly || primaryRole(u.id) === "guest");
   return (
-    <Table className="mt-6">
-      <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Plan</TableHead><TableHead>Activity</TableHead><TableHead>Banned</TableHead></TableRow></TableHeader>
+    <div className="mt-6">
+    <label className="flex items-center gap-2 text-sm"><Switch checked={pendingOnly} onCheckedChange={setPendingOnly} />Awaiting activation only ({(users ?? []).filter((u) => primaryRole(u.id) === "guest").length})</label>
+    <Table className="mt-4">
+      <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Access</TableHead><TableHead>Role</TableHead><TableHead>Plan</TableHead><TableHead>Activity</TableHead><TableHead>Banned</TableHead></TableRow></TableHeader>
       <TableBody>
-        {(users ?? []).map((u) => (
+        {shown.map((u) => (
           <TableRow key={u.id}>
             <TableCell><div className="font-medium">{u.display_name}</div><div className="text-xs text-muted-foreground">{u.email}</div></TableCell>
+            <TableCell>{primaryRole(u.id) === "guest"
+              ? <Button size="sm" onClick={() => activate(u.id, true)}>Activate subscription</Button>
+              : primaryRole(u.id) === "subscriber" ? <Button size="sm" variant="outline" onClick={() => activate(u.id, false)}>Deactivate</Button> : <span className="text-xs text-muted-foreground">Staff</span>}</TableCell>
             <TableCell>
               <Select value={primaryRole(u.id)} onValueChange={(v) => setRole(u.id, v as (typeof ROLES)[number])}>
                 <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -198,6 +213,7 @@ function UsersTab() {
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 }
 
