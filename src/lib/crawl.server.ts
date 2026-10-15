@@ -22,7 +22,7 @@ async function scrape(url: string, region: string): Promise<string> {
 }
 
 type Extracted = {
-  title: string; summary: string; why_rising: string; category: string;
+  title: string; summary: string; why_rising: string; title_ar?: string; summary_ar?: string; why_rising_ar?: string; category: string;
   pulse_score: number; lead_time_hours: number; momentum: string;
   url?: string; location?: string; event_date?: string; register_url?: string;
 };
@@ -31,6 +31,7 @@ async function extract(src: Source, markdown: string): Promise<Extracted[]> {
   const sys = `You turn scraped web pages into concise "pulse signals" for entrepreneurs and businesses.
 Return JSON: {"items":[...]} with up to 6 items. Each item:
 title (short, English), summary (1-2 sentences), why_rising (why it is gaining momentum),
+title_ar, summary_ar, why_rising_ar: the same content written natively in polished Modern Standard Arabic as an Arab business editor would write it (not a literal translation; never use the words استخبارات or استخبار),
 category (e.g. Tech, Business, Culture, Sports, Entertainment, Apps, Events),
 pulse_score (0-100 strength), lead_time_hours (estimated hours before mainstream coverage, 0-72),
 momentum ("emerging" | "rising" | "surging"),
@@ -55,7 +56,7 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
   const refreshHours = get("refresh_hours", 12);
   const minScore = get("noise_min_score", 35);
 
-  const cutoff = new Date(Date.now() - refreshHours * 3600_000).toISOString();
+  const cutoff = new Date(Date.now() - Math.max(1, refreshHours - 1) * 3600_000).toISOString();
   let q = supabaseAdmin.from("sources").select("*").eq("is_active", true);
   if (!opts.force) q = q.or(`last_crawled_at.is.null,last_crawled_at.lt.${cutoff}`);
   const { data: sources } = await q.order("last_crawled_at", { ascending: true, nullsFirst: true }).limit(opts.maxSources ?? 20);
@@ -77,6 +78,9 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
             title: i.title.slice(0, 200),
             summary: i.summary,
             why_rising: i.why_rising,
+            title_ar: i.title_ar?.slice(0, 200) ?? null,
+            summary_ar: i.summary_ar ?? null,
+            why_rising_ar: i.why_rising_ar ?? null,
             category: i.category,
             region: src.region,
             pulse_score: Math.max(0, Math.min(100, Math.round(i.pulse_score ?? 50))),
