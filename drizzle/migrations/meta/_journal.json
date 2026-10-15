@@ -15,6 +15,13 @@
       "when": 1792080704765,
       "tag": "0001_manual_activation_ar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792082221827,
+      "tag": "0002_connectivity_and_ar_teasers",
+      "breakpoints": true
     }
   ]
 }
