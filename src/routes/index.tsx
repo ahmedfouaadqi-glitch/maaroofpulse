@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SignalCard, type Signal } from "@/components/SignalCard";
 import { RegionPicker } from "@/components/RegionPicker";
+import { ConnectivityCard } from "@/components/ConnectivityCard";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
 import { useRegion } from "@/hooks/useRegion";
@@ -97,6 +98,7 @@ function Landing() {
           </div>
           <RegionPicker region={region} setRegion={setRegion} useGps={useGps} />
         </div>
+        <ConnectivityCard region={region} />
         {items.length === 0 && !teaser.isLoading && (
           <p className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">{t("d_empty")}</p>
         )}
