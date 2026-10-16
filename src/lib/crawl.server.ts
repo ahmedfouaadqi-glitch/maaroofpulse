@@ -9,6 +9,11 @@ const PLATFORMS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads",
 const INSIGHT_RULES = `models_view: array of exactly 10 objects, one per AI model (${MODEL_NAMES.join(", ")}): {"name","stance":"agree"|"caution"|"neutral","note_en","note_ar"} — each note is ONE short sentence describing how that model's typical perspective reads this signal (its strength, credibility, spread). Describe and weigh only: NO advice, NO recommendations, NO action plans.
 cta_en, cta_ar: ONE single sentence inviting the reader to continue at maaroofai.com to turn this specific signal into decisions and an execution plan. Tie it to the item's topic, vary the wording every time, mention "maaroofai.com" literally. cta_ar in polished native Arabic.`;
 
+export function dedupKey(region: string, title: string) {
+  const norm = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  return `${region}|${norm}|${new Date().toISOString().slice(0, 10)}`;
+}
+
 async function scrape(url: string, region: string): Promise<string> {
   const key = process.env["FIRECRAWL_API_KEY"];
   if (!key) throw new Error("FIRECRAWL_API_KEY is not configured");
@@ -45,7 +50,7 @@ async function extract(src: Source, markdown: string): Promise<Extracted[]> {
   const sys = `You turn scraped web pages into concise "pulse signals" for entrepreneurs and businesses.
 Return JSON: {"items":[...]} with up to 6 items. Each item:
 title (short, English), summary (1-2 sentences), why_rising (why it is gaining momentum),
-title_ar, summary_ar, why_rising_ar: the same content written natively in polished Modern Standard Arabic as an Arab business editor would write it (not a literal translation; never use the words استخبارات or استخبار),
+title_ar, summary_ar, why_rising_ar: the same content re-written from scratch in polished Modern Standard Arabic the way a senior Arab business journalist would headline it — natural Arabic word order and idiom, never a literal or word-by-word translation, keep brand/app names in their original form; never use the words استخبارات or استخبار,
 category (e.g. Tech, Business, Culture, Sports, Entertainment, Apps, Events, Social),
 For social trend pages, each item is a trending hashtag/topic: explain what it is about and why people are talking about it.
 pulse_score (0-100 strength), lead_time_hours (estimated hours before mainstream coverage, 0-72),
@@ -53,7 +58,6 @@ momentum ("emerging" | "rising" | "surging"),
 url (absolute link to the item if present), location (venue/city for events or null),
 event_date (ISO date for events or null), register_url (registration/ticket link or null).
 platform: where this item lives — one of ${PLATFORMS.join(", ")} (use the real platform only when the page proves it; default "${src.platform ?? "web"}"),
-${INSIGHT_RULES}
 Only include real items present in the page — never invent items, numbers or links. No markdown.`;
   const text = await aiComplete(
     [
@@ -110,13 +114,18 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
             event_date: i.event_date && !isNaN(Date.parse(i.event_date)) ? new Date(i.event_date).toISOString() : null,
             source_id: src.id,
             platform: PLATFORMS.includes(i.platform ?? "") ? i.platform! : (src.platform ?? "web"),
-            models_view: cleanModels(i.models_view) as any,
-            cta_en: cleanCta(i.cta_en),
-            cta_ar: cleanCta(i.cta_ar),
+            dedup_key: dedupKey(src.region, i.title),
           }));
-        if (rows.length) {
-          await supabaseAdmin.from("signals").insert(rows);
-          created += rows.length;
+        const unique = [...new Map(rows.map((r) => [r.dedup_key, r])).values()];
+        if (unique.length) {
+          const { data: existing } = await supabaseAdmin.from("signals").select("dedup_key").in("dedup_key", unique.map((r) => r.dedup_key));
+          const seen = new Set((existing ?? []).map((e) => e.dedup_key));
+          const fresh = unique.filter((r) => !seen.has(r.dedup_key));
+          for (const r of unique.filter((r) => seen.has(r.dedup_key))) {
+            await supabaseAdmin.from("signals").update({ pulse_score: r.pulse_score, momentum: r.momentum }).eq("dedup_key", r.dedup_key);
+          }
+          if (fresh.length) await supabaseAdmin.from("signals").insert(fresh);
+          created += fresh.length;
         }
         await supabaseAdmin.from("sources").update({ last_crawled_at: new Date().toISOString(), last_status: `ok · ${rows.length}` }).eq("id", src.id);
       } catch (e) {
