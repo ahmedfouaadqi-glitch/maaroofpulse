@@ -43,6 +43,13 @@
       "when": 1792142532274,
       "tag": "0005_phase1_horizon_locks_usage_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792142664438,
+      "tag": "0006_acquire_lock_return_false",
+      "breakpoints": true
     }
   ]
 }
