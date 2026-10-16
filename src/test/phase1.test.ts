@@ -59,13 +59,15 @@ describe("verification", () => {
 describe("API Direct", () => {
   afterEach(() => { delete process.env["APIDIRECT_API_KEY"]; vi.restoreAllMocks(); });
   it("disabled without key and makes no network call", async () => {
+    delete process.env["APIDIRECT_API_KEY"];
     const f = vi.spyOn(globalThis, "fetch");
     expect(apiDirectStatus().state).toBe("disabled");
     expect(await apiDirectFetch("anything")).toBeNull();
     expect(f).not.toHaveBeenCalled();
   });
-  it("stays blocked (unverified) even with a key", () => {
+  it("enabled with a key; generic fetch still returns no mock data", async () => {
     process.env["APIDIRECT_API_KEY"] = "x";
-    expect(apiDirectStatus().state).toBe("blocked");
+    expect(apiDirectStatus().state).toBe("enabled");
+    expect(await apiDirectFetch("anything")).toBeNull();
   });
 });

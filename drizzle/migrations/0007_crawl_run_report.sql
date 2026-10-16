@@ -1,0 +1,1 @@
+alter table public.crawl_runs add column if not exists report jsonb, add column if not exists stop_reason text, add column if not exists next_run_at timestamptz;

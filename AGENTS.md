@@ -21,4 +21,4 @@
 - Every external provider call is logged through `logUsage` in `src/lib/usage.server.ts`; cost is `actual` only when the provider response reports it — keeps spend auditable and honest.
 - "On the horizon" is defined once: `isHorizon` in `src/lib/phase1.ts` mirrored by SQL `get_horizon_count`; change both together.
 - Signal verification (raw/corroborated/verified) is derived only from `signal_evidences` via `classifyVerification`; reposts and same-publisher copies count once, trust score never upgrades.
-- API Direct stays disabled/blocked in `src/lib/apidirect.server.ts` until endpoints are verified from official docs; no mock data.
+- API Direct (`src/lib/apidirect.server.ts`) uses only endpoints/prices from its official OpenAPI spec; cost is always logged estimated (response reports none), calls are capped per cycle and skipped when the region was refreshed this window — no budget guessing, no mock data.

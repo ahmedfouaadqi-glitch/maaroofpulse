@@ -100,7 +100,7 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean;
   let q = supabaseAdmin.from("sources").select("*").eq("is_active", true);
   if (!opts.force) q = q.or(`last_crawled_at.is.null,last_crawled_at.lt.${cutoff}`);
   const { data: sources } = await q.order("last_crawled_at", { ascending: true, nullsFirst: true }).limit(opts.maxSources ?? 20);
-  if (!sources?.length) return { sources: 0, created: 0 };
+  if (!sources?.length) return { sources: 0, created: 0, errors: [] as string[], crawlRunId: undefined as string | undefined };
 
   const { data: run } = await supabaseAdmin.from("crawl_runs").insert({ sources_count: sources.length }).select().single();
   let created = 0;
@@ -166,7 +166,7 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean;
       status: errors.length ? (created ? "partial" : "failed") : "done", error: errors.join("\n") || null,
     }).eq("id", run.id);
   }
-  return { sources: sources.length, created, errors };
+  return { sources: sources.length, created, errors, crawlRunId: run?.id as string | undefined };
 }
 
 export async function backfillArabic(limit = 15) {
@@ -274,4 +274,76 @@ export async function searchSweep() {
     } catch { /* keep sweeping other kinds */ }
   }
   return created;
+}
+
+export type ApiDirectReport = { requests: number; ok: number; failed: number; created: number; updated: number; duplicates: number; skipped_fresh: number; gaps: string[]; stop: "complete" | "guard_limit" | "disabled" };
+
+/** API Direct sweep: verified news + X trends per region. Skips region/capability pairs refreshed in the last
+ *  (refresh-1)h, stops at the per-cycle request guard, and records unreachable regions as gaps. */
+export async function apiDirectSweep(runId?: string | null): Promise<ApiDirectReport> {
+  const ad = await import("./apidirect.server");
+  const rep: ApiDirectReport = { requests: 0, ok: 0, failed: 0, created: 0, updated: 0, duplicates: 0, skipped_fresh: 0, gaps: [], stop: "complete" };
+  if (ad.apiDirectStatus().state !== "enabled") return { ...rep, stop: "disabled" };
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: settings } = await supabaseAdmin.from("app_settings").select("key,value");
+  const get = (k: string, d: number) => Number(settings?.find((s) => s.key === k)?.value ?? d);
+  const maxReq = get("apidirect_max_requests_per_cycle", 8);
+  const since = new Date(Date.now() - Math.max(1, get("refresh_hours", 12) - 1) * 3600_000).toISOString();
+  const { data: recent } = await supabaseAdmin.from("api_usage_logs").select("capability,created_at").eq("provider", "apidirect").eq("status", "ok").gte("created_at", since);
+  const fresh = new Set((recent ?? []).map((r) => r.capability));
+
+  const tasks: { cap: "news/articles" | "twitter/trends"; region: string }[] = [];
+  for (const region of Object.keys(SEARCH_REGIONS)) for (const cap of ["news/articles", "twitter/trends"] as const) {
+    if (fresh.has(`${cap}:${region}`)) rep.skipped_fresh++; else tasks.push({ cap, region });
+  }
+
+  for (const t of tasks) {
+    if (rep.requests >= maxReq) { rep.stop = "guard_limit"; rep.gaps.push(`${t.cap} ${t.region}: deferred (per-cycle request guard)`); continue; }
+    rep.requests++;
+    let md = "", kind = "news", platform = "news", name = "API Direct News";
+    if (t.cap === "news/articles") {
+      const arts = await ad.newsArticles(t.region, "economy OR investment OR business OR technology", runId);
+      if (!arts) { rep.failed++; rep.gaps.push(`news ${t.region}: request failed`); continue; }
+      rep.ok++;
+      if (!arts.length) { rep.gaps.push(`news ${t.region}: no articles in last 24h`); continue; }
+      md = arts.map((a) => `## ${a.title}\n${a.snippet ?? ""}\nPublisher: ${a.source_name ?? a.domain ?? ""}\nURL: ${a.url}`).join("\n\n");
+    } else {
+      const { trends, gap } = await ad.twitterTrends(t.region, runId);
+      if (gap?.startsWith("request failed")) rep.failed++; else rep.ok++;
+      if (!trends) { rep.gaps.push(`x trends ${t.region}: ${gap}`); continue; }
+      kind = "social"; platform = "x"; name = "X trends (API Direct)";
+      md = trends.slice(0, 20).map((x) => `## ${x.name}\nURL: ${x.url ?? ""}${x.tweet_volume ? `\nPosts: ${x.tweet_volume}` : ""}`).join("\n\n");
+    }
+    try {
+      const src: Source = { id: "", name, url: "https://apidirect.io", kind, region: t.region, trust_score: 75, platform };
+      const items = await extract(src, md);
+      const rows = items.filter((i) => i.url?.startsWith("http")).map((i) => ({
+        kind, title: i.title.slice(0, 200), summary: i.summary, why_rising: i.why_rising,
+        title_ar: i.title_ar?.slice(0, 200) ?? null, summary_ar: i.summary_ar ?? null, why_rising_ar: i.why_rising_ar ?? null,
+        category: i.category, region: t.region,
+        pulse_score: Math.max(0, Math.min(100, Math.round(i.pulse_score ?? 50))),
+        lead_time_hours: Math.max(0, Math.round(i.lead_time_hours ?? 0)),
+        momentum: ["emerging", "rising", "surging"].includes(i.momentum) ? i.momentum : "rising",
+        source_name: platform === "x" ? "X" : (() => { try { return new URL(i.url!).hostname.replace(/^www\./, ""); } catch { return "News"; } })(),
+        source_url: i.url!, platform, dedup_key: dedupKey(t.region, i.title),
+      }));
+      const unique = [...new Map(rows.map((r) => [r.dedup_key, r])).values()];
+      if (!unique.length) continue;
+      const { data: existing } = await supabaseAdmin.from("signals").select("id,dedup_key").in("dedup_key", unique.map((r) => r.dedup_key));
+      const seen = new Map((existing ?? []).map((e) => [e.dedup_key, e.id]));
+      for (const r of unique.filter((r) => seen.has(r.dedup_key))) {
+        rep.duplicates++;
+        await supabaseAdmin.from("signals").update({ pulse_score: r.pulse_score, momentum: r.momentum }).eq("id", seen.get(r.dedup_key)!);
+        await addEvidence(supabaseAdmin, seen.get(r.dedup_key)!, { url: r.source_url, publisher: r.source_name, title: r.title, evidence_type: platform === "x" ? "social" : "secondary" });
+        rep.updated++;
+      }
+      const freshRows = unique.filter((r) => !seen.has(r.dedup_key));
+      if (freshRows.length) {
+        const { data: ins } = await supabaseAdmin.from("signals").insert(freshRows).select("id,source_url,source_name,title");
+        for (const x of ins ?? []) await addEvidence(supabaseAdmin, x.id, { url: x.source_url!, publisher: x.source_name, title: x.title, evidence_type: platform === "x" ? "social" : "secondary" });
+        rep.created += ins?.length ?? 0;
+      }
+    } catch (e) { rep.gaps.push(`${t.cap} ${t.region}: extraction failed`); }
+  }
+  return rep;
 }
