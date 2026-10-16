@@ -221,7 +221,7 @@ export async function searchSweep() {
       const web = (data.data?.web ?? data.data ?? []) as { url: string; title?: string; description?: string }[];
       if (!web.length) continue;
       const md = web.map((w) => `## ${w.title ?? ""}\n${w.description ?? ""}\nURL: ${w.url}`).join("\n\n");
-      const src: Source = { id: "", name: "Web search", url: web[0].url, kind, region, trust_score: 70, platform: "web" };
+      const src: Source = { id: "", name: "Web search", url: web[0]!.url, kind, region, trust_score: 70, platform: "web" };
       const items = await extract(src, md);
       const rows = items.filter((i) => i.url?.startsWith("http")).map((i) => ({
         kind, title: i.title.slice(0, 200), summary: i.summary, why_rising: i.why_rising,
