@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_usage_logs: {
+        Row: {
+          capability: string
+          cost_amount: number
+          cost_basis: string | null
+          cost_type: string
+          cost_unit: string
+          created_at: string
+          duration_ms: number | null
+          error_redacted: string | null
+          http_status: number | null
+          id: string
+          provider: string
+          retry_count: number
+          run_id: string | null
+          status: string
+        }
+        Insert: {
+          capability: string
+          cost_amount?: number
+          cost_basis?: string | null
+          cost_type?: string
+          cost_unit?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_redacted?: string | null
+          http_status?: number | null
+          id?: string
+          provider: string
+          retry_count?: number
+          run_id?: string | null
+          status: string
+        }
+        Update: {
+          capability?: string
+          cost_amount?: number
+          cost_basis?: string | null
+          cost_type?: string
+          cost_unit?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_redacted?: string | null
+          http_status?: number | null
+          id?: string
+          provider?: string
+          retry_count?: number
+          run_id?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           description: string | null
@@ -119,6 +170,27 @@ export type Database = {
         }
         Relationships: []
       }
+      job_locks: {
+        Row: {
+          heartbeat_at: string
+          locked_until: string
+          name: string
+          run_id: string
+        }
+        Insert: {
+          heartbeat_at?: string
+          locked_until: string
+          name: string
+          run_id: string
+        }
+        Update: {
+          heartbeat_at?: string
+          locked_until?: string
+          name?: string
+          run_id?: string
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           created_at: string
@@ -206,6 +278,47 @@ export type Database = {
         }
         Relationships: []
       }
+      signal_evidences: {
+        Row: {
+          content_hash: string | null
+          domain: string | null
+          evidence_type: string
+          fetched_at: string
+          id: string
+          publisher: string | null
+          signal_id: string
+          url: string
+        }
+        Insert: {
+          content_hash?: string | null
+          domain?: string | null
+          evidence_type?: string
+          fetched_at?: string
+          id?: string
+          publisher?: string | null
+          signal_id: string
+          url: string
+        }
+        Update: {
+          content_hash?: string | null
+          domain?: string | null
+          evidence_type?: string
+          fetched_at?: string
+          id?: string
+          publisher?: string | null
+          signal_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_evidences_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signals: {
         Row: {
           category: string | null
@@ -232,6 +345,8 @@ export type Database = {
           summary_ar: string | null
           title: string
           title_ar: string | null
+          verification_basis: string | null
+          verification_status: string
           why_rising: string | null
           why_rising_ar: string | null
         }
@@ -260,6 +375,8 @@ export type Database = {
           summary_ar?: string | null
           title: string
           title_ar?: string | null
+          verification_basis?: string | null
+          verification_status?: string
           why_rising?: string | null
           why_rising_ar?: string | null
         }
@@ -288,6 +405,8 @@ export type Database = {
           summary_ar?: string | null
           title?: string
           title_ar?: string | null
+          verification_basis?: string | null
+          verification_status?: string
           why_rising?: string | null
           why_rising_ar?: string | null
         }
@@ -390,6 +509,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_job_lock: {
+        Args: { _name: string; _run_id: string; _ttl_seconds?: number }
+        Returns: boolean
+      }
       can_view_full: { Args: { _user_id: string }; Returns: boolean }
       get_cycle_activity: {
         Args: { _region?: string }
@@ -397,6 +520,13 @@ export type Database = {
           current_count: number
           kind: string
           previous_count: number
+        }[]
+      }
+      get_horizon_count: {
+        Args: { _region?: string }
+        Returns: {
+          computed_at: string
+          horizon_count: number
         }[]
       }
       get_limited_signals: {
@@ -435,6 +565,14 @@ export type Database = {
         Returns: boolean
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      release_job_lock: {
+        Args: { _name: string; _run_id: string }
+        Returns: boolean
+      }
+      renew_job_lock: {
+        Args: { _name: string; _run_id: string; _ttl_seconds?: number }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "super_admin" | "editor" | "subscriber" | "guest"

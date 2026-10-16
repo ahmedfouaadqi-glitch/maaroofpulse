@@ -36,6 +36,13 @@
       "when": 1792132602711,
       "tag": "0004_signal_dedup_key",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792142532274,
+      "tag": "0005_phase1_horizon_locks_usage_evidence",
+      "breakpoints": true
     }
   ]
 }
