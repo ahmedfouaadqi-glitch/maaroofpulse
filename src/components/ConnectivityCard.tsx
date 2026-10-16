@@ -29,8 +29,8 @@ export function ConnectivityCard({ region }: { region: string }) {
       <div className="bg-card p-4">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Wifi className="h-3.5 w-3.5 text-pulse" />{t("conn_users")} · {regionName(region, lang)}</div>
         <div className="mt-1 font-display text-2xl font-bold">{s?.internet_users ? nf.format(s.internet_users) : "—"}</div>
-        <div className="text-[11px] text-muted-foreground">
-          {s?.internet_users && s.population ? `${Math.round((s.internet_users / s.population) * 100)}% · ` : ""}{t("conn_note")}{s?.year ? ` (${s.source} ${s.year})` : ""}
+        <div className="text-[11px] text-muted-foreground" title={s?.year ? `${s.source} ${s.year}` : undefined}>
+          {s?.internet_users && s.population ? `${Math.round((s.internet_users / s.population) * 100)}% · ` : ""}{t("conn_note")}
         </div>
       </div>
       <div className="bg-card p-4">
