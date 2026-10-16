@@ -67,7 +67,7 @@ Observed signals:\n${JSON.stringify(signals ?? [])}`,
 export const LIVE_MODELS = [
   { name: "Gemini", model: "google/gemini-2.5-flash" },
   { name: "ChatGPT", model: "openai/gpt-5-mini" },
-  { name: "Claude", model: "anthropic/claude-sonnet-4-5" },
+  { name: "Claude", model: "anthropic/claude-sonnet-5" },
 ];
 
 export const runGeoCheck = createServerFn({ method: "POST" })
