@@ -14,7 +14,11 @@ export const runCrawlNow = createServerFn({ method: "POST" })
     const { data: staff } = await context.supabase.rpc("is_staff", { _user_id: context.userId });
     if (!staff) throw new Error("Forbidden");
     const { crawlSources } = await import("./crawl.server");
-    return crawlSources({ force: !!data.force, maxSources: 12 });
+    const { acquireLock, releaseLock } = await import("./usage.server");
+    const runId = crypto.randomUUID();
+    if (!(await acquireLock("crawl_cycle", runId))) return { sources: 0, created: 0, errors: ["Another collection cycle is running — try again in a few minutes."] };
+    try { return await crawlSources({ force: !!data.force, maxSources: 12, runId, lockName: "crawl_cycle" }); }
+    finally { await releaseLock("crawl_cycle", runId); }
   });
 
 async function requireFull(context: { supabase: any; userId: string }) {

@@ -1,3 +1,4 @@
+import { isHorizon } from "@/lib/phase1";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -70,7 +71,7 @@ function Dashboard() {
 
   if (profile?.banned) return (<div className="min-h-screen"><SiteHeader /><p className="p-16 text-center">{t("banned")}</p></div>);
 
-  const list = dedupeSignals((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).filter((x) => kind !== "app" || appGroup === "all" || x.category === appGroup).filter((x) => !horizon || (x.momentum !== "surging" && (x.lead_time_hours ?? 0) >= 12 && (x.lead_time_hours ?? 0) <= 72)).slice().sort((a, b) => b.pulse_score - a.pulse_score);
+  const list = dedupeSignals((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).filter((x) => kind !== "app" || appGroup === "all" || x.category === appGroup).filter((x) => !horizon || isHorizon(x)).slice().sort((a, b) => b.pulse_score - a.pulse_score);
   return (
     <div className="min-h-screen">
       <SiteHeader />

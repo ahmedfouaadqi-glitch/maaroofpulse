@@ -46,12 +46,20 @@ function Landing() {
     queryKey: ["plans"],
     queryFn: async () => (await supabase.from("plans").select("*").eq("is_active", true).order("sort_order")).data ?? [],
   });
+  const horizon = useQuery({
+    queryKey: ["horizon", region],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_horizon_count", region === "global" ? {} : { _region: region });
+      if (error) throw error;
+      return Number(data?.[0]?.horizon_count ?? 0);
+    },
+  });
   const visible = Number(settings.data?.find((s) => s.key === "teaser_visible_count")?.value ?? 3);
   const items = teaser.data ?? [];
   const ctaTo = user ? "/dashboard" : "/auth";
 
   const metrics = [
-    { k: "m_horizon", v: items.filter((i) => i.momentum === "emerging").length },
+    { k: "m_horizon", v: horizon.isError ? "—" : horizon.isLoading ? "…" : horizon.data ?? "—" },
     { k: "m_surging", v: items.filter((i) => i.momentum === "surging").length },
     { k: "m_strength", v: items.length ? Math.round(items.reduce((a, b) => a + b.pulse_score, 0) / items.length) : "—" },
     { k: "m_sources", v: new Set(items.map((i) => i.kind)).size ? "8+" : "—" },

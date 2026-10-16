@@ -11,6 +11,7 @@ export type Signal = {
   event_date?: string | null; created_at: string;
   platform?: string | null; cta_ar?: string | null; cta_en?: string | null;
   models_view?: unknown;
+  verification_status?: string | null; verification_basis?: string | null;
 };
 
 export const PLATFORM_KEYS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads", "telegram", "linkedin", "snapchat", "google", "google_play", "app_store", "news", "web"];
@@ -33,6 +34,7 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
           <span className={cn("inline-flex items-center gap-1 font-medium", s.momentum === "surging" ? "text-surge" : "text-pulse")}>
             <Icon className="h-3.5 w-3.5" />{t(s.momentum as Key)}<Tip text={t("tip_momentum")} />
           </span>
+          {s.verification_status && <Badge variant={s.verification_status === "raw" ? "outline" : "secondary"} title={s.verification_basis ?? undefined}>{t(`vs_${s.verification_status}` as Key)}</Badge>}
           {s.category && <span className="text-muted-foreground">· {s.category}</span>}
           <span className="ms-auto text-muted-foreground">{regionName(s.region, lang)}</span>
         </div>
