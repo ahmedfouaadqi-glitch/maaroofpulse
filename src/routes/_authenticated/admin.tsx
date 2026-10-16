@@ -95,7 +95,21 @@ function ContentTab() {
       </div>
       <div className="rounded-2xl border border-border bg-card p-4 text-sm">
         <div className="mb-2 font-semibold">Recent cycles</div>
-        {(runs ?? []).map((r) => <div key={r.id} className="flex gap-3 text-muted-foreground"><span>{new Date(r.started_at).toLocaleString()}</span><Badge variant="secondary">{r.status}</Badge><span>{r.signals_created} signals</span></div>)}
+        {(runs ?? []).map((r) => {
+          const rep = r.report as any;
+          return (
+            <div key={r.id} className="border-t border-border py-2 first:border-t-0">
+              <div className="flex flex-wrap gap-3 text-muted-foreground"><span>{new Date(r.started_at).toLocaleString()}</span><Badge variant="secondary">{r.status}</Badge><span>{r.signals_created} signals</span>{r.stop_reason && <Badge variant="outline">stop: {r.stop_reason}</Badge>}{r.next_run_at && <span>next: {new Date(r.next_run_at).toLocaleString()}</span>}</div>
+              {rep && (
+                <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                  <div>New {rep.new_signals} · updated {rep.updated_signals} · duplicates avoided {rep.duplicates_avoided} · stale sources left {rep.stale_sources_remaining}</div>
+                  <div>{Object.entries(rep.providers ?? {}).map(([p, v]: any) => `${p}: ${v.ok} ok / ${v.failed} failed · actual ${v.actual} · estimated ${v.estimated.toFixed(2)} ${v.unit}`).join("  |  ") || "No paid provider calls"}</div>
+                  {rep.gaps?.length > 0 && <details><summary>Coverage gaps ({rep.gaps.length})</summary><ul className="list-disc ps-5">{rep.gaps.map((g: string, i: number) => <li key={i}>{g}</li>)}</ul></details>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <Table>
         <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Kind</TableHead><TableHead>Platform</TableHead><TableHead>Region</TableHead><TableHead>Score</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
@@ -315,12 +329,12 @@ function SettingsTab() {
 function UsageTab() {
   const { data } = useQuery({ queryKey: ["admin-usage"], queryFn: async () => (await supabase.from("api_usage_logs").select("*").order("created_at", { ascending: false }).limit(200)).data ?? [] });
   const rows = data ?? [];
-  const sum = (type: string) => rows.filter((r) => r.cost_type === type && r.cost_unit === "credits").reduce((a, r) => a + Number(r.cost_amount), 0);
+  const sum = (type: string, unit: string) => rows.filter((r) => r.cost_type === type && r.cost_unit === unit).reduce((a, r) => a + Number(r.cost_amount), 0);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Actual = reported by the provider response. Estimated = published price list. Free = documented free calls. Paid calls stop at the daily cap (setting daily_paid_credit_cap).</p>
+      <p className="text-sm text-muted-foreground">Actual = reported by the provider response. Estimated = published price list (API Direct never reports cost, so it is always estimated; its monthly free tier may lower the real charge). API Direct calls are capped per cycle by the setting apidirect_max_requests_per_cycle.</p>
       <div className="grid grid-cols-3 gap-3 text-sm">
-        {(["actual", "estimated", "free"] as const).map((k) => <div key={k} className="rounded-xl border border-border bg-card p-4"><div className="text-muted-foreground">{k}</div><div className="font-display text-2xl font-bold">{sum(k)} credits</div></div>)}
+        {(["actual", "estimated", "free"] as const).map((k) => <div key={k} className="rounded-xl border border-border bg-card p-4"><div className="text-muted-foreground">{k}</div><div className="font-display text-xl font-bold">{sum(k, "credits")} credits</div><div className="text-muted-foreground">${(sum(k, "usd_cents") / 100).toFixed(3)} (API Direct)</div></div>)}
       </div>
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-xs">
