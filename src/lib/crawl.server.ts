@@ -100,7 +100,7 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean;
   let q = supabaseAdmin.from("sources").select("*").eq("is_active", true);
   if (!opts.force) q = q.or(`last_crawled_at.is.null,last_crawled_at.lt.${cutoff}`);
   const { data: sources } = await q.order("last_crawled_at", { ascending: true, nullsFirst: true }).limit(opts.maxSources ?? 20);
-  if (!sources?.length) return { sources: 0, created: 0 };
+  if (!sources?.length) return { sources: 0, created: 0, errors: [] as string[], crawlRunId: undefined as string | undefined };
 
   const { data: run } = await supabaseAdmin.from("crawl_runs").insert({ sources_count: sources.length }).select().single();
   let created = 0;
@@ -166,7 +166,7 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean;
       status: errors.length ? (created ? "partial" : "failed") : "done", error: errors.join("\n") || null,
     }).eq("id", run.id);
   }
-  return { sources: sources.length, created, errors };
+  return { sources: sources.length, created, errors, crawlRunId: run?.id as string | undefined };
 }
 
 export async function backfillArabic(limit = 15) {
