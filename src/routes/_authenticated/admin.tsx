@@ -47,6 +47,7 @@ function Admin() {
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             {isAdmin && <TabsTrigger value="plans">Plans</TabsTrigger>}
             {isAdmin && <TabsTrigger value="countries">Internet users</TabsTrigger>}
+            <TabsTrigger value="usage">Usage & cost</TabsTrigger>
             {isAdmin && <TabsTrigger value="settings">Settings & flags</TabsTrigger>}
           </TabsList>
           <TabsContent value="content"><ContentTab /></TabsContent>
@@ -54,6 +55,7 @@ function Admin() {
           {isAdmin && <TabsContent value="users"><UsersTab /></TabsContent>}
           {isAdmin && <TabsContent value="plans"><PlansTab /></TabsContent>}
           {isAdmin && <TabsContent value="countries"><CountriesTab /></TabsContent>}
+          <TabsContent value="usage"><UsageTab /></TabsContent>
           {isAdmin && <TabsContent value="settings"><SettingsTab /></TabsContent>}
         </Tabs>
       </main>
@@ -306,6 +308,27 @@ function SettingsTab() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function UsageTab() {
+  const { data } = useQuery({ queryKey: ["admin-usage"], queryFn: async () => (await supabase.from("api_usage_logs").select("*").order("created_at", { ascending: false }).limit(200)).data ?? [] });
+  const rows = data ?? [];
+  const sum = (type: string) => rows.filter((r) => r.cost_type === type && r.cost_unit === "credits").reduce((a, r) => a + Number(r.cost_amount), 0);
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Actual = reported by the provider response. Estimated = published price list. Free = documented free calls. Paid calls stop at the daily cap (setting daily_paid_credit_cap).</p>
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        {(["actual", "estimated", "free"] as const).map((k) => <div key={k} className="rounded-xl border border-border bg-card p-4"><div className="text-muted-foreground">{k}</div><div className="font-display text-2xl font-bold">{sum(k)} credits</div></div>)}
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full text-xs">
+          <thead><tr className="text-muted-foreground">{["Time", "Provider", "Capability", "Status", "HTTP", "ms", "Cost", "Type", "Error"].map((h) => <th key={h} className="p-2 text-start">{h}</th>)}</tr></thead>
+          <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-border"><td className="p-2">{new Date(r.created_at).toLocaleString()}</td><td className="p-2">{r.provider}</td><td className="p-2">{r.capability}</td><td className="p-2">{r.status}</td><td className="p-2">{r.http_status}</td><td className="p-2">{r.duration_ms}</td><td className="p-2">{Number(r.cost_amount)} {r.cost_unit}</td><td className="p-2">{r.cost_type}</td><td className="p-2 text-muted-foreground">{r.error_redacted}</td></tr>)}</tbody>
+        </table>
+        {!rows.length && <p className="p-6 text-center text-sm text-muted-foreground">No provider calls logged yet.</p>}
+      </div>
     </div>
   );
 }
