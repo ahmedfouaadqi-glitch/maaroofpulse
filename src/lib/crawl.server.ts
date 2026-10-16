@@ -197,3 +197,53 @@ Return JSON {"items":[{"id","stance":"agree"|"caution"|"neutral","note_en","note
   }
   return n;
 }
+
+const SEARCH_REGIONS: Record<string, string> = { IQ: "Baghdad Iraq", SA: "Riyadh Saudi Arabia", AE: "Dubai UAE", EG: "Cairo Egypt", JO: "Amman Jordan", KW: "Kuwait", QA: "Doha Qatar", LB: "Beirut Lebanon", GB: "London UK", US: "United States", AU: "Sydney Australia", NL: "Amsterdam Netherlands" };
+
+/** Firecrawl Search sweep for upcoming events and investment news in one region (rotates per call). */
+export async function searchSweep() {
+  const key = process.env["FIRECRAWL_API_KEY"];
+  if (!key) return 0;
+  const codes = Object.keys(SEARCH_REGIONS);
+  const region = codes[Math.floor(Date.now() / 300_000) % codes.length];
+  const place = SEARCH_REGIONS[region];
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let created = 0;
+  for (const [kind, query] of [["event", `upcoming events conferences exhibitions ${place} this month`], ["economy", `investment funding economy news ${place}`]] as const) {
+    try {
+      const res = await fetch("https://api.firecrawl.dev/v2/search", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query, limit: 6, tbs: "qdr:w" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) continue;
+      const web = (data.data?.web ?? data.data ?? []) as { url: string; title?: string; description?: string }[];
+      if (!web.length) continue;
+      const md = web.map((w) => `## ${w.title ?? ""}\n${w.description ?? ""}\nURL: ${w.url}`).join("\n\n");
+      const src: Source = { id: "", name: "Web search", url: web[0].url, kind, region, trust_score: 70, platform: "web" };
+      const items = await extract(src, md);
+      const rows = items.filter((i) => i.url?.startsWith("http")).map((i) => ({
+        kind, title: i.title.slice(0, 200), summary: i.summary, why_rising: i.why_rising,
+        title_ar: i.title_ar?.slice(0, 200) ?? null, summary_ar: i.summary_ar ?? null, why_rising_ar: i.why_rising_ar ?? null,
+        category: i.category, region,
+        pulse_score: Math.max(0, Math.min(100, Math.round(i.pulse_score ?? 50))),
+        lead_time_hours: Math.max(0, Math.round(i.lead_time_hours ?? 0)),
+        momentum: ["emerging", "rising", "surging"].includes(i.momentum) ? i.momentum : "rising",
+        source_name: (() => { try { return new URL(i.url!).hostname.replace(/^www\./, ""); } catch { return "Web"; } })(),
+        source_url: i.url!,
+        map_url: i.location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.location)}` : null,
+        register_url: i.register_url?.startsWith("http") ? i.register_url : null,
+        event_date: i.event_date && !isNaN(Date.parse(i.event_date)) ? new Date(i.event_date).toISOString() : null,
+        platform: "web", dedup_key: dedupKey(region, i.title),
+      }));
+      const unique = [...new Map(rows.map((r) => [r.dedup_key, r])).values()];
+      if (!unique.length) continue;
+      const { data: existing } = await supabaseAdmin.from("signals").select("dedup_key").in("dedup_key", unique.map((r) => r.dedup_key));
+      const seen = new Set((existing ?? []).map((e) => e.dedup_key));
+      const fresh = unique.filter((r) => !seen.has(r.dedup_key));
+      if (fresh.length) { await supabaseAdmin.from("signals").insert(fresh); created += fresh.length; }
+    } catch { /* keep sweeping other kinds */ }
+  }
+  return created;
+}
