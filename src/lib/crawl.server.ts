@@ -1,5 +1,7 @@
 // Server-only: crawl registered sources with Firecrawl and turn them into pulse signals.
 import { aiComplete, parseJson } from "./ai.server";
+import { logUsage, renewLock } from "./usage.server";
+import { classifyVerification, type Evidence } from "./phase1";
 
 type Source = { id: string; name: string; url: string; kind: string; region: string; trust_score: number; platform?: string | null };
 
@@ -24,9 +26,10 @@ export function dedupKey(region: string, title: string) {
   return `${region}|${norm}|${new Date().toISOString().slice(0, 10)}`;
 }
 
-async function scrape(url: string, region: string): Promise<string> {
+async function scrape(url: string, region: string, runId?: string | null): Promise<string> {
   const key = process.env["FIRECRAWL_API_KEY"];
   if (!key) throw new Error("FIRECRAWL_API_KEY is not configured");
+  const t0 = Date.now();
   const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -38,6 +41,9 @@ async function scrape(url: string, region: string): Promise<string> {
     }),
   });
   const data = (await res.json().catch(() => ({}))) as any;
+  await logUsage({ run_id: runId, provider: "firecrawl", capability: "scrape", status: res.ok ? "ok" : "error", http_status: res.status,
+    duration_ms: Date.now() - t0, reported_cost: data?.data?.metadata?.creditsUsed ?? data?.creditsUsed, estimate: 1,
+    error: res.ok ? undefined : String(data?.error ?? "failed") });
   if (!res.ok) throw new Error(`Firecrawl ${res.status}: ${data?.error ?? "failed"}`);
   return (data.markdown ?? data.data?.markdown ?? "").slice(0, 9000);
 }
@@ -73,7 +79,17 @@ Only include real items present in the page — never invent items, numbers or l
   return (parsed?.items ?? []).filter((i) => i?.title);
 }
 
-export async function crawlSources(opts: { maxSources?: number; force?: boolean } = {}) {
+/** Attach a source as evidence to a signal and re-derive its verification status from all evidence. */
+async function addEvidence(db: any, signalId: string, ev: Evidence) {
+  let domain: string | null = null;
+  try { domain = new URL(ev.url).hostname.replace(/^www\./, ""); } catch { /* keep null */ }
+  await db.from("signal_evidences").upsert({ signal_id: signalId, url: ev.url, domain, publisher: ev.publisher ?? domain, content_hash: ev.content_hash ?? null, evidence_type: ev.evidence_type ?? "secondary" }, { onConflict: "signal_id,url", ignoreDuplicates: true });
+  const { data: all } = await db.from("signal_evidences").select("url,publisher,content_hash,evidence_type").eq("signal_id", signalId);
+  const v = classifyVerification((all ?? []) as Evidence[]);
+  await db.from("signals").update({ verification_status: v.status, verification_basis: v.basis }).eq("id", signalId);
+}
+
+export async function crawlSources(opts: { maxSources?: number; force?: boolean; runId?: string; lockName?: string } = {}) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: settings } = await supabaseAdmin.from("app_settings").select("key,value");
   const get = (k: string, d: number) => Number(settings?.find((s) => s.key === k)?.value ?? d);
@@ -93,7 +109,8 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
   await Promise.all(
     sources.map(async (src) => {
       try {
-        const md = await scrape(src.url, src.region);
+        if (opts.runId && opts.lockName) await renewLock(opts.lockName, opts.runId);
+        const md = await scrape(src.url, src.region, opts.runId);
         const items = await extract(src as Source, md);
         const rows = items
           .filter((i) => (i.pulse_score ?? 0) >= minScore)
@@ -125,9 +142,13 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
           const seen = new Set((existing ?? []).map((e) => e.dedup_key));
           const fresh = unique.filter((r) => !seen.has(r.dedup_key));
           for (const r of unique.filter((r) => seen.has(r.dedup_key))) {
-            await supabaseAdmin.from("signals").update({ pulse_score: r.pulse_score, momentum: r.momentum }).eq("dedup_key", r.dedup_key);
+            const { data: hit } = await supabaseAdmin.from("signals").update({ pulse_score: r.pulse_score, momentum: r.momentum }).eq("dedup_key", r.dedup_key).select("id").maybeSingle();
+            if (hit) await addEvidence(supabaseAdmin, hit.id, { url: r.source_url, publisher: r.source_name, title: r.title, evidence_type: src.trust_score >= 90 ? "primary" : "secondary" });
           }
-          if (fresh.length) await supabaseAdmin.from("signals").insert(fresh);
+          if (fresh.length) {
+            const { data: ins } = await supabaseAdmin.from("signals").insert(fresh).select("id,source_url,source_name,title");
+            for (const x of ins ?? []) if (x.source_url) await addEvidence(supabaseAdmin, x.id, { url: x.source_url, publisher: x.source_name, title: x.title, evidence_type: "secondary" });
+          }
           created += fresh.length;
         }
         await supabaseAdmin.from("sources").update({ last_crawled_at: new Date().toISOString(), last_status: `ok · ${rows.length}` }).eq("id", src.id);
@@ -211,12 +232,15 @@ export async function searchSweep() {
   let created = 0;
   for (const [kind, query] of [["event", `upcoming events conferences exhibitions ${place} this month`], ["economy", `investment funding economy news ${place}`]] as const) {
     try {
+      const t0 = Date.now();
       const res = await fetch("https://api.firecrawl.dev/v2/search", {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({ query, limit: 6, tbs: "qdr:w" }),
       });
       const data = (await res.json().catch(() => ({}))) as any;
+      await logUsage({ provider: "firecrawl", capability: "search", status: res.ok ? "ok" : "error", http_status: res.status,
+        duration_ms: Date.now() - t0, reported_cost: data?.creditsUsed, estimate: 2, error: res.ok ? undefined : String(data?.error ?? "failed") });
       if (!res.ok) continue;
       const web = (data.data?.web ?? data.data ?? []) as { url: string; title?: string; description?: string }[];
       if (!web.length) continue;
@@ -242,7 +266,11 @@ export async function searchSweep() {
       const { data: existing } = await supabaseAdmin.from("signals").select("dedup_key").in("dedup_key", unique.map((r) => r.dedup_key));
       const seen = new Set((existing ?? []).map((e) => e.dedup_key));
       const fresh = unique.filter((r) => !seen.has(r.dedup_key));
-      if (fresh.length) { await supabaseAdmin.from("signals").insert(fresh); created += fresh.length; }
+      if (fresh.length) {
+        const { data: ins } = await supabaseAdmin.from("signals").insert(fresh).select("id,source_url,source_name,title");
+        for (const x of ins ?? []) await addEvidence(supabaseAdmin, x.id, { url: x.source_url!, publisher: x.source_name, title: x.title });
+        created += fresh.length;
+      }
     } catch { /* keep sweeping other kinds */ }
   }
   return created;
