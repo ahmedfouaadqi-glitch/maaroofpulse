@@ -17,3 +17,8 @@
 - New signups get the guest role (limited RPC view); only admins grant subscriber — keeps full access manual.
 - Signal kinds: trend/event/app/news/social; per-country sources (App Store RSS, Google News, trends24) live in `sources`; internet-user counts are annual estimates in `country_stats`, cycle activity comes from the `get_cycle_activity` RPC — no fabricated live counters.
 - Signals are deduplicated by `dedup_key` (region|normalized title|UTC day, unique index); repeats only refresh score. Cards show no CTA or model views; real model calls (Gemini/ChatGPT/Claude via AI gateway, unavailable ones shown as such) live only in the presence check, and maaroofai.com is suggested only there and in the assistant on request — PULSE describes, maaroofai.com advises.
+- Crawl cycles (cron and admin "run now") must hold the `crawl_cycle` lock via `acquire_job_lock`/`renew_job_lock`/`release_job_lock` (3-min TTL, run_id-guarded) — prevents overlapping cycles and recovers from crashes.
+- Every external provider call is logged through `logUsage` in `src/lib/usage.server.ts`; cost is `actual` only when the provider response reports it — keeps spend auditable and honest.
+- "On the horizon" is defined once: `isHorizon` in `src/lib/phase1.ts` mirrored by SQL `get_horizon_count`; change both together.
+- Signal verification (raw/corroborated/verified) is derived only from `signal_evidences` via `classifyVerification`; reposts and same-publisher copies count once, trust score never upgrades.
+- API Direct stays disabled/blocked in `src/lib/apidirect.server.ts` until endpoints are verified from official docs; no mock data.
