@@ -202,7 +202,7 @@ export async function analyzeWithModels(cap = 60, opts: { runId?: string; lockNa
     return !Array.isArray(v) || READ_MODELS.some((m) => !v.find((x) => x.name === m.name && x.available));
   }).slice(0, cap);
   const sys = `You read factual monitoring signals. For each item give your own short reading: how strong and credible the signal looks and how widely it may spread. Describe only — no advice, no recommendations, no links, no brand promotion. Never use the words استخبارات or استخبار.
-Return json {"items":[{"id","stance":"agree"|"caution"|"neutral","note_en","note_ar"}]} where note_en is ONE English sentence and note_ar is ONE sentence of native, polished editorial Arabic (not a translation).`;
+Return json exactly like {"items":[{"id":"<item id>","stance":"agree","note_en":"<your English sentence>","note_ar":"<your Arabic sentence>"}]} with one entry per input item, stance one of agree|caution|neutral, all fields filled (never null), where note_en is ONE English sentence and note_ar is ONE sentence of native, polished editorial Arabic (not a translation).`;
   let n = 0;
   for (let i = 0; i < pending.length; i += 10) {
     if (opts.deadline && Date.now() > opts.deadline) break;
