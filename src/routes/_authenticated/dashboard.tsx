@@ -187,7 +187,7 @@ function GeoIndex() {
     e.preventDefault(); setBusy(true);
     try {
       const r = await check({ data: { brand, market, lang } });
-      if ("error" in r && r.error) toast.error(r.error); else if ("result" in r && r.result) setRes(r.result);
+      if ("error" in r && r.error) toast.error(r.error); else if ("result" in r && r.result) setRes(r.result as any);
     } catch (err) { toast.error(err instanceof Error ? err.message : "Error"); }
     setBusy(false);
   }
