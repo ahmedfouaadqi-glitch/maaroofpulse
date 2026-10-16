@@ -118,28 +118,37 @@ export type Database = {
           error: string | null
           finished_at: string | null
           id: string
+          next_run_at: string | null
+          report: Json | null
           signals_created: number | null
           sources_count: number | null
           started_at: string
           status: string | null
+          stop_reason: string | null
         }
         Insert: {
           error?: string | null
           finished_at?: string | null
           id?: string
+          next_run_at?: string | null
+          report?: Json | null
           signals_created?: number | null
           sources_count?: number | null
           started_at?: string
           status?: string | null
+          stop_reason?: string | null
         }
         Update: {
           error?: string | null
           finished_at?: string | null
           id?: string
+          next_run_at?: string | null
+          report?: Json | null
           signals_created?: number | null
           sources_count?: number | null
           started_at?: string
           status?: string | null
+          stop_reason?: string | null
         }
         Relationships: []
       }
