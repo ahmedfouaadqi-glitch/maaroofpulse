@@ -38,12 +38,15 @@ function Dashboard() {
   const { region, setRegion, useGps } = useRegion();
   const [kind, setKind] = useState("all");
   const [platform, setPlatform] = useState("all");
+  const [appGroup, setAppGroup] = useState("all");
+  const horizon = kind === "horizon";
+  const qKind = horizon ? "all" : kind;
 
   const limited = useQuery({
-    queryKey: ["limited-signals", region, kind],
+    queryKey: ["limited-signals", region, qKind],
     enabled: !canViewFull && !loading,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_limited_signals", { ...(region !== "global" ? { _region: region } : {}), ...(kind !== "all" ? { _kind: kind } : {}) });
+      const { data, error } = await supabase.rpc("get_limited_signals", { ...(region !== "global" ? { _region: region } : {}), ...(qKind !== "all" ? { _kind: qKind } : {}) });
       if (error) throw error;
       return (data ?? []) as Signal[];
     },
@@ -53,12 +56,12 @@ function Dashboard() {
     queryFn: async () => (await supabase.from("signals").select("created_at").order("created_at", { ascending: false }).limit(1).maybeSingle()).data?.created_at ?? null,
   });
   const signals = useQuery({
-    queryKey: ["signals", region, kind],
+    queryKey: ["signals", region, qKind],
     enabled: canViewFull,
     queryFn: async () => {
       let q = supabase.from("signals").select("*").eq("status", "published").order("created_at", { ascending: false }).limit(60);
       if (region !== "global") q = q.in("region", [region, "global"]);
-      if (kind !== "all") q = q.eq("kind", kind);
+      if (qKind !== "all") q = q.eq("kind", qKind);
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Signal[];
@@ -67,7 +70,7 @@ function Dashboard() {
 
   if (profile?.banned) return (<div className="min-h-screen"><SiteHeader /><p className="p-16 text-center">{t("banned")}</p></div>);
 
-  const list = dedupeSignals((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).slice().sort((a, b) => b.pulse_score - a.pulse_score);
+  const list = dedupeSignals((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).filter((x) => kind !== "app" || appGroup === "all" || x.category === appGroup).filter((x) => !horizon || (x.momentum !== "surging" && (x.lead_time_hours ?? 0) >= 12 && (x.lead_time_hours ?? 0) <= 72)).slice().sort((a, b) => b.pulse_score - a.pulse_score);
   return (
     <div className="min-h-screen">
       <SiteHeader />
@@ -86,9 +89,10 @@ function Dashboard() {
           <ConnectivityCard region={region} />
           <RefreshInfo last={lastRun.data ?? null} lang={lang} />
           <Tabs value={kind} onValueChange={setKind} className="mb-6">
-            <TabsList>
+            <TabsList className="h-auto flex-wrap">
               <TabsTrigger value="all">{t("d_all")}</TabsTrigger>
-              {["trend", "event", "app", "news", "social"].map((k) => <TabsTrigger key={k} value={k}>{t(`kind_${k}` as Key)}</TabsTrigger>)}
+              {["trend", "economy", "event", "app", "news", "social"].map((k) => <TabsTrigger key={k} value={k}>{t(`kind_${k}` as Key)}</TabsTrigger>)}
+              <TabsTrigger value="horizon">{t("tab_horizon")}</TabsTrigger>
             </TabsList>
           </Tabs>
           {canViewFull && (kind === "social" || kind === "all") && (
@@ -98,7 +102,14 @@ function Dashboard() {
               ))}
             </div>
           )}
-          {list.length === 0 && !signals.isLoading && <p className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">{t("d_empty")}</p>}
+          {kind === "app" && (
+            <div className="-mt-3 mb-6 flex flex-wrap gap-2">
+              {["all", "most_used", "most_traded", "spreading"].map((g) => (
+                <Button key={g} size="sm" variant={appGroup === g ? "default" : "outline"} onClick={() => setAppGroup(g)}>{t(`ag_${g}` as Key)}</Button>
+              ))}
+            </div>
+          )}
+          {list.length === 0 && !signals.isLoading && <p className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">{t(horizon ? "horizon_empty" : "d_empty")}</p>}
           <div className="grid gap-4 md:grid-cols-2">
             {list.map((s) => <SignalCard key={s.id} s={s} compact={!canViewFull} />)}
           </div>

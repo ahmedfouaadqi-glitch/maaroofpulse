@@ -7,10 +7,12 @@ export const Route = createFileRoute("/api/public/cron/crawl")({
       POST: async ({ request }) => {
         const authFailure = await authenticateCronRequest(request);
         if (authFailure) return authFailure;
-        const { crawlSources, backfillArabic } = await import("@/lib/crawl.server");
+        const { crawlSources, backfillArabic, analyzeWithModels, searchSweep } = await import("@/lib/crawl.server");
         const result = await crawlSources({ maxSources: 3 });
         const translated = await backfillArabic(10).catch(() => 0);
-        return Response.json({ success: true, ...result, translated });
+        const searched = await searchSweep().catch(() => 0);
+        const analyzed = await analyzeWithModels(6).catch(() => 0);
+        return Response.json({ success: true, ...result, translated, searched, analyzed });
       },
     },
   },

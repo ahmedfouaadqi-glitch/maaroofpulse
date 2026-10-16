@@ -1,4 +1,4 @@
-import { MapPin, ExternalLink, Ticket, Clock, Flame, TrendingUp, Sparkles } from "lucide-react";
+import { MapPin, ExternalLink, Ticket, Clock, Flame, TrendingUp, Sparkles, Info, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useI18n, regionName, type Key } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -10,10 +10,10 @@ export type Signal = {
   source_name?: string | null; source_url?: string | null; map_url?: string | null; register_url?: string | null;
   event_date?: string | null; created_at: string;
   platform?: string | null; cta_ar?: string | null; cta_en?: string | null;
-  models_view?: { name: string; stance: string; note_en: string; note_ar: string }[] | null | unknown;
+  models_view?: unknown;
 };
 
-export const PLATFORM_KEYS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads", "telegram", "linkedin", "google", "google_play", "app_store", "news", "web"];
+export const PLATFORM_KEYS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads", "telegram", "linkedin", "snapchat", "google", "google_play", "app_store", "news", "web"];
 
 const momentumIcon = { emerging: Sparkles, rising: TrendingUp, surging: Flame } as Record<string, typeof Flame>;
 
@@ -31,7 +31,7 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
           <Badge variant="secondary">{t(`kind_${s.kind}` as Key) ?? s.kind}</Badge>
           {s.platform && PLATFORM_KEYS.includes(s.platform) && s.platform !== s.kind && <Badge variant="outline">{t(`pf_${s.platform}` as Key)}</Badge>}
           <span className={cn("inline-flex items-center gap-1 font-medium", s.momentum === "surging" ? "text-surge" : "text-pulse")}>
-            <Icon className="h-3.5 w-3.5" />{t(s.momentum as Key)}
+            <Icon className="h-3.5 w-3.5" />{t(s.momentum as Key)}<Tip text={t("tip_momentum")} />
           </span>
           {s.category && <span className="text-muted-foreground">· {s.category}</span>}
           <span className="ms-auto text-muted-foreground">{regionName(s.region, lang)}</span>
@@ -42,7 +42,7 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
         {!compact && summary && <p className="mt-2 text-sm text-muted-foreground">{summary}</p>}
         <div className="mt-4">
           <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-            <span>{t("m_strength")}</span><span className="font-semibold text-foreground">{s.pulse_score}</span>
+            <span className="inline-flex items-center gap-1">{t("m_strength")}<Tip text={t("tip_strength")} /></span><span className="font-semibold text-foreground">{s.pulse_score}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-gradient-to-r from-pulse to-accent" style={{ width: `${s.pulse_score}%` }} />
@@ -56,9 +56,10 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
                 {why}
               </div>
             )}
+            <ModelReadings v={s.models_view} />
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
               {!!s.lead_time_hours && (
-                <span className="inline-flex items-center gap-1 text-muted-foreground"><Clock className="h-3.5 w-3.5" />{t("m_lead")}: {s.lead_time_hours}{t("hrs")}</span>
+                <span className="inline-flex items-center gap-1 text-muted-foreground"><Clock className="h-3.5 w-3.5" />{t("m_lead")}: {s.lead_time_hours}{t("hrs")}<Tip text={t("tip_lead")} /></span>
               )}
               {s.event_date && <span className="text-muted-foreground">{new Date(s.event_date).toLocaleDateString(lang === "ar" ? "ar" : "en", { dateStyle: "medium" })}</span>}
               {s.map_url && <a href={s.map_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-pulse hover:underline"><MapPin className="h-3.5 w-3.5" />{t("d_map")}</a>}
@@ -72,6 +73,33 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
   );
 }
 
+function Tip({ text }: { text: string }) {
+  return <span title={text} aria-label={text} className="inline-flex cursor-help text-muted-foreground"><Info className="h-3 w-3" /></span>;
+}
+
+type Reading = { name: string; available?: boolean; stance: string; note_en: string; note_ar: string };
+function ModelReadings({ v }: { v: unknown }) {
+  const { t, lang } = useI18n();
+  if (!Array.isArray(v) || !v.length) return null;
+  const list = v as Reading[];
+  return (
+    <details className="group/m mt-4 rounded-xl border border-border p-3 text-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-muted-foreground">
+        {t("models_title")}<ChevronDown className="h-3.5 w-3.5 transition-transform group-open/m:rotate-180" />
+      </summary>
+      <ul className="mt-3 space-y-2">
+        {list.map((m) => (
+          <li key={m.name}>
+            <div className="flex items-center gap-2 text-xs"><span className="font-semibold">{m.name}</span>
+              {m.available === false ? <span className="text-muted-foreground">{t("models_unavailable")}</span> : <span className={m.stance === "caution" ? "text-surge" : "text-pulse"}>{t(`st_${m.stance}` as Key)}</span>}
+            </div>
+            {m.available !== false && <p className="mt-0.5 text-muted-foreground">{lang === "ar" ? m.note_ar || m.note_en : m.note_en}</p>}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 /** Keep one card per headline; prefer the user's own country over global. */
 export function dedupeSignals<T extends { title: string; title_ar?: string | null; region: string }>(list: T[]): T[] {

@@ -3,11 +3,21 @@ import { aiComplete, parseJson } from "./ai.server";
 
 type Source = { id: string; name: string; url: string; kind: string; region: string; trust_score: number; platform?: string | null };
 
-export const MODEL_NAMES = ["DeepSeek", "ChatGPT", "Gemini", "Claude", "Perplexity", "Copilot", "Grok", "Mistral", "Kimi", "Qwen"];
-const PLATFORMS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads", "telegram", "linkedin", "google", "google_play", "app_store", "news", "web"];
+const PLATFORMS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads", "telegram", "linkedin", "snapchat", "google", "google_play", "app_store", "news", "web"];
+/** Real models called through the AI gateway for background readings. */
+export const READ_MODELS = [
+  { name: "Gemini", model: "google/gemini-2.5-flash" },
+  { name: "ChatGPT", model: "openai/gpt-5-mini" },
+  { name: "Claude", model: "anthropic/claude-sonnet-4-5" },
+];
 
-const INSIGHT_RULES = `models_view: array of exactly 10 objects, one per AI model (${MODEL_NAMES.join(", ")}): {"name","stance":"agree"|"caution"|"neutral","note_en","note_ar"} — each note is ONE short sentence describing how that model's typical perspective reads this signal (its strength, credibility, spread). Describe and weigh only: NO advice, NO recommendations, NO action plans.
-cta_en, cta_ar: ONE single sentence inviting the reader to continue at maaroofai.com to turn this specific signal into decisions and an execution plan. Tie it to the item's topic, vary the wording every time, mention "maaroofai.com" literally. cta_ar in polished native Arabic.`;
+/** App chart group derived from the source itself (never guessed by AI). */
+function appGroup(src: Source) {
+  const u = src.url.toLowerCase();
+  if (u.includes("top-paid") || u.includes("grossing")) return "most_traded";
+  if (u.includes("top-free") || u.includes("/top?") || u.includes("collection")) return "most_used";
+  return "spreading";
+}
 
 export function dedupKey(region: string, title: string) {
   const norm = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -36,22 +46,15 @@ type Extracted = {
   title: string; summary: string; why_rising: string; title_ar?: string; summary_ar?: string; why_rising_ar?: string; category: string;
   pulse_score: number; lead_time_hours: number; momentum: string;
   url?: string; location?: string; event_date?: string; register_url?: string;
-  platform?: string; models_view?: { name: string; stance: string; note_en: string; note_ar: string }[]; cta_en?: string; cta_ar?: string;
+  platform?: string;
 };
-
-function cleanModels(m: Extracted["models_view"]) {
-  if (!Array.isArray(m)) return null;
-  const out = m.filter((x) => x && MODEL_NAMES.includes(x.name)).map((x) => ({ name: x.name, stance: ["agree", "caution", "neutral"].includes(x.stance) ? x.stance : "neutral", note_en: String(x.note_en ?? "").slice(0, 240), note_ar: String(x.note_ar ?? "").slice(0, 240) }));
-  return out.length ? out : null;
-}
-function cleanCta(s?: string) { return s && /maaroofai\.com/i.test(s) ? s.slice(0, 300) : null; }
 
 async function extract(src: Source, markdown: string): Promise<Extracted[]> {
   const sys = `You turn scraped web pages into concise "pulse signals" for entrepreneurs and businesses.
 Return JSON: {"items":[...]} with up to 6 items. Each item:
 title (short, English), summary (1-2 sentences), why_rising (why it is gaining momentum),
 title_ar, summary_ar, why_rising_ar: the same content re-written from scratch in polished Modern Standard Arabic the way a senior Arab business journalist would headline it — natural Arabic word order and idiom, never a literal or word-by-word translation, keep brand/app names in their original form; never use the words استخبارات or استخبار,
-category (e.g. Tech, Business, Culture, Sports, Entertainment, Apps, Events, Social),
+category (e.g. Economy, Investment, Markets, Tech, Business, Culture, Sports, Entertainment, Apps, Events, Social),
 For social trend pages, each item is a trending hashtag/topic: explain what it is about and why people are talking about it.
 pulse_score (0-100 strength), lead_time_hours (estimated hours before mainstream coverage, 0-72),
 momentum ("emerging" | "rising" | "surging"),
@@ -102,7 +105,7 @@ export async function crawlSources(opts: { maxSources?: number; force?: boolean 
             title_ar: i.title_ar?.slice(0, 200) ?? null,
             summary_ar: i.summary_ar ?? null,
             why_rising_ar: i.why_rising_ar ?? null,
-            category: i.category,
+            category: src.kind === "app" ? appGroup(src as Source) : i.category,
             region: src.region,
             pulse_score: Math.max(0, Math.min(100, Math.round(i.pulse_score ?? 50))),
             lead_time_hours: Math.max(0, Math.round(i.lead_time_hours ?? 0)),
@@ -166,25 +169,81 @@ export async function backfillArabic(limit = 15) {
   return n;
 }
 
-export async function backfillInsights(limit = 8) {
+/** Real readings: each model is called separately; failures are stored as unavailable. */
+export async function analyzeWithModels(limit = 6) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: rows } = await supabaseAdmin.from("signals").select("id,kind,title,summary,region").is("models_view", null).order("created_at", { ascending: false }).limit(limit);
+  const { data: rows } = await supabaseAdmin.from("signals").select("id,kind,title,summary,region,source_name").is("models_view", null).order("created_at", { ascending: false }).limit(limit);
   if (!rows?.length) return 0;
-  const text = await aiComplete(
-    [
-      { role: "system", content: `For each signal return JSON {"items":[{"id","models_view":[...],"cta_en","cta_ar"}]}.\n${INSIGHT_RULES}\nNever use the words استخبارات or استخبار. No markdown.` },
-      { role: "user", content: JSON.stringify(rows) },
-    ],
-    { json: true },
-  );
-  const out = parseJson<{ items?: { id: string; models_view?: Extracted["models_view"]; cta_en?: string; cta_ar?: string }[] }>(text)?.items ?? [];
+  const sys = `You read factual monitoring signals. For each item give your own short reading: how strong and credible the signal looks and how widely it may spread. Describe only — no advice, no recommendations, no links, no brand promotion. Never use the words استخبارات or استخبار.
+Return JSON {"items":[{"id","stance":"agree"|"caution"|"neutral","note_en","note_ar"}]} where note_en is ONE English sentence and note_ar is ONE sentence of native, polished editorial Arabic (not a translation).`;
+  const payload = JSON.stringify(rows.map((r) => ({ id: r.id, kind: r.kind, title: r.title, summary: r.summary, region: r.region, source: r.source_name })));
+  const results = await Promise.all(READ_MODELS.map(async (m) => {
+    try {
+      const text = await aiComplete([{ role: "system", content: sys }, { role: "user", content: payload }], { model: m.model, json: true });
+      const items = parseJson<{ items?: { id: string; stance?: string; note_en?: string; note_ar?: string }[] }>(text)?.items ?? [];
+      return { m, items, ok: items.length > 0 };
+    } catch { return { m, items: [], ok: false }; }
+  }));
+  if (!results.some((r) => r.ok)) return 0;
   let n = 0;
-  for (const i of out) {
-    if (!i?.id || !rows.some((r) => r.id === i.id)) continue;
-    const mv = cleanModels(i.models_view);
-    if (!mv) continue;
-    await supabaseAdmin.from("signals").update({ models_view: mv as any, cta_en: cleanCta(i.cta_en), cta_ar: cleanCta(i.cta_ar) }).eq("id", i.id);
+  for (const r of rows) {
+    const view = results.map(({ m, items, ok }) => {
+      const it = items.find((x) => x?.id === r.id);
+      if (!ok || !it?.note_en) return { name: m.name, available: false, stance: "neutral", note_en: "", note_ar: "" };
+      return { name: m.name, available: true, stance: ["agree", "caution", "neutral"].includes(it.stance ?? "") ? it.stance : "neutral", note_en: String(it.note_en).slice(0, 240), note_ar: String(it.note_ar ?? "").slice(0, 240) };
+    });
+    await supabaseAdmin.from("signals").update({ models_view: view as any }).eq("id", r.id);
     n++;
   }
   return n;
+}
+
+const SEARCH_REGIONS: Record<string, string> = { IQ: "Baghdad Iraq", SA: "Riyadh Saudi Arabia", AE: "Dubai UAE", EG: "Cairo Egypt", JO: "Amman Jordan", KW: "Kuwait", QA: "Doha Qatar", LB: "Beirut Lebanon", GB: "London UK", US: "United States", AU: "Sydney Australia", NL: "Amsterdam Netherlands" };
+
+/** Firecrawl Search sweep for upcoming events and investment news in one region (rotates per call). */
+export async function searchSweep() {
+  const key = process.env["FIRECRAWL_API_KEY"];
+  if (!key) return 0;
+  const codes = Object.keys(SEARCH_REGIONS);
+  const region = codes[Math.floor(Date.now() / 300_000) % codes.length]!;
+  const place = SEARCH_REGIONS[region]!;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let created = 0;
+  for (const [kind, query] of [["event", `upcoming events conferences exhibitions ${place} this month`], ["economy", `investment funding economy news ${place}`]] as const) {
+    try {
+      const res = await fetch("https://api.firecrawl.dev/v2/search", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query, limit: 6, tbs: "qdr:w" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) continue;
+      const web = (data.data?.web ?? data.data ?? []) as { url: string; title?: string; description?: string }[];
+      if (!web.length) continue;
+      const md = web.map((w) => `## ${w.title ?? ""}\n${w.description ?? ""}\nURL: ${w.url}`).join("\n\n");
+      const src: Source = { id: "", name: "Web search", url: web[0]!.url, kind, region, trust_score: 70, platform: "web" };
+      const items = await extract(src, md);
+      const rows = items.filter((i) => i.url?.startsWith("http")).map((i) => ({
+        kind, title: i.title.slice(0, 200), summary: i.summary, why_rising: i.why_rising,
+        title_ar: i.title_ar?.slice(0, 200) ?? null, summary_ar: i.summary_ar ?? null, why_rising_ar: i.why_rising_ar ?? null,
+        category: i.category, region,
+        pulse_score: Math.max(0, Math.min(100, Math.round(i.pulse_score ?? 50))),
+        lead_time_hours: Math.max(0, Math.round(i.lead_time_hours ?? 0)),
+        momentum: ["emerging", "rising", "surging"].includes(i.momentum) ? i.momentum : "rising",
+        source_name: (() => { try { return new URL(i.url!).hostname.replace(/^www\./, ""); } catch { return "Web"; } })(),
+        source_url: i.url!,
+        map_url: i.location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.location)}` : null,
+        register_url: i.register_url?.startsWith("http") ? i.register_url : null,
+        event_date: i.event_date && !isNaN(Date.parse(i.event_date)) ? new Date(i.event_date).toISOString() : null,
+        platform: "web", dedup_key: dedupKey(region, i.title),
+      }));
+      const unique = [...new Map(rows.map((r) => [r.dedup_key, r])).values()];
+      if (!unique.length) continue;
+      const { data: existing } = await supabaseAdmin.from("signals").select("dedup_key").in("dedup_key", unique.map((r) => r.dedup_key));
+      const seen = new Set((existing ?? []).map((e) => e.dedup_key));
+      const fresh = unique.filter((r) => !seen.has(r.dedup_key));
+      if (fresh.length) { await supabaseAdmin.from("signals").insert(fresh); created += fresh.length; }
+    } catch { /* keep sweeping other kinds */ }
+  }
+  return created;
 }
