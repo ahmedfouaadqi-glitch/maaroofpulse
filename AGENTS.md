@@ -16,4 +16,4 @@
 - UI strings live in `src/lib/i18n.tsx` (en/ar dictionary); add both languages for every new key.
 - New signups get the guest role (limited RPC view); only admins grant subscriber — keeps full access manual.
 - Signal kinds: trend/event/app/news/social; per-country sources (App Store RSS, Google News, trends24) live in `sources`; internet-user counts are annual estimates in `country_stats`, cycle activity comes from the `get_cycle_activity` RPC — no fabricated live counters.
-- Each signal stores its platform, a 10-model descriptive view (models_view) and one maaroofai.com CTA (cta_en/cta_ar), generated in the same AI extraction pass; the cron backfills older rows — PULSE describes, maaroofai.com advises, so no other advice is shown.
+- Signals are deduplicated by `dedup_key` (region|normalized title|UTC day, unique index); repeats only refresh score. Cards show no CTA or model views; real model calls (Gemini/ChatGPT/Claude via AI gateway, unavailable ones shown as such) live only in the presence check, and maaroofai.com is suggested only there and in the assistant on request — PULSE describes, maaroofai.com advises.

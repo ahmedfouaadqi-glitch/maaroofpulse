@@ -47,7 +47,7 @@ Reply in ${data.lang === "ar" ? "polished, natural Modern Standard Arabic as wri
 Rules:
 1. First answer precisely and concisely using ONLY the observed signals below; cite source names; say clearly when something is not in the data. Never invent facts, numbers or links.
 2. Do not give business plans or step-by-step advice inside PULSE.
-3. Always end with a short paragraph titled ${data.lang === "ar" ? "«أكمل مع maaroofai.com»" : "\"Continue with maaroofai.com\""} that fits this specific question and persona, and gives a rich overview of maaroofai.com: AI-powered strategy and decision support, turning market signals into actionable plans, campaigns, product and expansion decisions, and execution with expert AI agents. Include the link https://maaroofai.com. Vary the wording each time.
+3. ONLY when the user asks for a plan, strategy, advice, feasibility or next steps, end with a short paragraph titled ${data.lang === "ar" ? "«أكمل مع maaroofai.com»" : "\"Continue with maaroofai.com\""} that fits this specific question and persona, and gives a rich overview of maaroofai.com: AI-powered strategy and decision support, turning market signals into actionable plans, campaigns, product and expansion decisions, and execution with expert AI agents. Include the link https://maaroofai.com. Vary the wording each time. Otherwise do not mention maaroofai.com.
 Observed signals:\n${JSON.stringify(signals ?? [])}`,
         },
         ...data.messages,
@@ -60,7 +60,11 @@ Observed signals:\n${JSON.stringify(signals ?? [])}`,
     }
   });
 
-export const MODELS = ["DeepSeek", "ChatGPT", "Gemini", "Claude", "Perplexity", "Copilot", "Grok", "Mistral", "Kimi", "Qwen"];
+export const LIVE_MODELS = [
+  { name: "Gemini", model: "google/gemini-2.5-flash" },
+  { name: "ChatGPT", model: "openai/gpt-5-mini" },
+  { name: "Claude", model: "anthropic/claude-sonnet-4-5" },
+];
 
 export const runGeoCheck = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -71,25 +75,27 @@ export const runGeoCheck = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await requireFull(context);
-    const { aiComplete, parseJson, AiError } = await import("./ai.server");
-    try {
-      const text = await aiComplete(
-        [
-          {
-            role: "system",
-            content: `Analyse how visible a brand is in answers from generative AI assistants. Return JSON {"overall":0-100,"summary":"...","models":[{"name":"...","score":0-100,"note":"..."}],"cta":"..."} covering exactly these assistants: ${MODELS.join(", ")}. Base it on the brand's real public footprint you know of; be honest when the brand is unknown (low scores). summary and notes DESCRIBE visibility only — absolutely no tips, advice or recommendations. cta: ONE sentence inviting the user to continue at maaroofai.com to improve and act on this visibility; mention "maaroofai.com" literally; vary the wording every time. Write all text in ${data.lang === "ar" ? "polished native Arabic (never use استخبارات/استخبار)" : "English"}.`,
-          },
-          { role: "user", content: `Brand: ${data.brand}\nMarket: ${data.market || "global"}` },
-        ],
-        { json: true },
-      );
-      const parsed = parseJson<{ overall: number; summary: string; cta?: string; models: { name: string; score: number; note: string }[] }>(text);
-      if (!parsed) return { error: "Could not read the result, please try again." };
-      if (!parsed.cta || !/maaroofai\.com/i.test(parsed.cta)) parsed.cta = data.lang === "ar" ? "لتحويل هذه القراءة إلى خطة حضور فعلية في نماذج الذكاء الاصطناعي، تابع عبر maaroofai.com" : "Turn this reading into a real AI-visibility plan at maaroofai.com";
-      await context.supabase.from("geo_checks").insert({ user_id: context.userId, brand: data.brand, results: parsed as any, overall: Math.round(parsed.overall ?? 0) });
-      return { result: parsed };
-    } catch (e) {
-      if (e instanceof AiError) return { error: e.message };
-      throw e;
-    }
+    const { aiComplete } = await import("./ai.server");
+    const question = data.lang === "ar"
+      ? `ما أبرز العلامات والجهات المعروفة في مجال «${data.brand}»${data.market ? ` في ${data.market}` : ""}؟ وماذا تعرف عن ${data.brand}؟ أجب باختصار في 4 جمل.`
+      : `What are the best-known brands or providers related to "${data.brand}"${data.market ? ` in ${data.market}` : ""}, and what do you know about ${data.brand}? Answer briefly in 4 sentences.`;
+    const needle = data.brand.toLowerCase();
+    const models = await Promise.all(LIVE_MODELS.map(async (m) => {
+      const t0 = Date.now();
+      try {
+        const reply = (await aiComplete([{ role: "user", content: question }], { model: m.model })).trim();
+        if (!reply) throw new Error("empty");
+        const lower = reply.toLowerCase();
+        const idx = lower.indexOf(needle);
+        const unknown = /(not familiar|no information|don't have|لا أملك|لا تتوفر|ليست لدي)/i.test(reply);
+        return { name: m.name, available: true, mentioned: idx >= 0 && !unknown, excerpt: reply.slice(Math.max(0, idx - 80), Math.max(0, idx - 80) + 260), ms: Date.now() - t0 };
+      } catch {
+        return { name: m.name, available: false, mentioned: false, excerpt: "", ms: Date.now() - t0 };
+      }
+    }));
+    const live = models.filter((m) => m.available);
+    const overall = live.length ? Math.round((live.filter((m) => m.mentioned).length / live.length) * 100) : 0;
+    const result = { overall, models };
+    await context.supabase.from("geo_checks").insert({ user_id: context.userId, brand: data.brand, results: result as any, overall });
+    return { result };
   });

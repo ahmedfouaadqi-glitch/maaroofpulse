@@ -212,6 +212,7 @@ export type Database = {
           created_at: string
           cta_ar: string | null
           cta_en: string | null
+          dedup_key: string | null
           event_date: string | null
           id: string
           kind: string
@@ -239,6 +240,7 @@ export type Database = {
           created_at?: string
           cta_ar?: string | null
           cta_en?: string | null
+          dedup_key?: string | null
           event_date?: string | null
           id?: string
           kind?: string
@@ -266,6 +268,7 @@ export type Database = {
           created_at?: string
           cta_ar?: string | null
           cta_en?: string | null
+          dedup_key?: string | null
           event_date?: string | null
           id?: string
           kind?: string

@@ -1,4 +1,4 @@
-import { MapPin, ExternalLink, Ticket, Clock, Flame, TrendingUp, Sparkles, ArrowUpRight, ChevronDown } from "lucide-react";
+import { MapPin, ExternalLink, Ticket, Clock, Flame, TrendingUp, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useI18n, regionName, type Key } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
   const { t, lang } = useI18n();
   const Icon = momentumIcon[s.momentum] ?? TrendingUp;
   const ar = lang === "ar";
-  const title = (ar && s.title_ar) || s.title || "████████ ██████ ████";
+  const title = (ar && s.title_ar) || s.title;
   const summary = (ar && s.summary_ar) || s.summary;
   const why = (ar && s.why_rising_ar) || s.why_rising;
   return (
@@ -36,7 +36,9 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
           {s.category && <span className="text-muted-foreground">· {s.category}</span>}
           <span className="ms-auto text-muted-foreground">{regionName(s.region, lang)}</span>
         </div>
-        <h3 className="text-base font-semibold leading-snug">{title}</h3>
+        {title ? <h3 className="text-base font-semibold leading-snug">{title}</h3> : (
+          <div aria-hidden className="space-y-2 py-1"><div className="h-3.5 w-11/12 animate-pulse rounded-full bg-muted" /><div className="h-3.5 w-2/3 animate-pulse rounded-full bg-muted" /></div>
+        )}
         {!compact && summary && <p className="mt-2 text-sm text-muted-foreground">{summary}</p>}
         <div className="mt-4">
           <div className="mb-1 flex justify-between text-xs text-muted-foreground">
@@ -63,8 +65,6 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
               {s.register_url && <a href={s.register_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline"><Ticket className="h-3.5 w-3.5" />{t("d_register")}</a>}
               {s.source_url && <a href={s.source_url} target="_blank" rel="noreferrer" className="ms-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><ExternalLink className="h-3.5 w-3.5" />{s.source_name ?? t("d_source")}</a>}
             </div>
-            <ModelsView s={s} />
-            <CtaLine s={s} />
           </>
         )}
       </div>
@@ -72,36 +72,15 @@ export function SignalCard({ s, locked, compact }: { s: Signal; locked?: boolean
   );
 }
 
-function ModelsView({ s }: { s: Signal }) {
-  const { t, lang } = useI18n();
-  const mv = Array.isArray(s.models_view) ? (s.models_view as { name: string; stance: string; note_en: string; note_ar: string }[]) : [];
-  if (!mv.length) return null;
-  const tone = (x: string) => (x === "agree" ? "text-pulse" : x === "caution" ? "text-surge" : "text-muted-foreground");
-  return (
-    <details className="group/m mt-4 rounded-xl border border-border p-3 text-sm">
-      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold">
-        {t("models_title")}<ChevronDown className="h-4 w-4 transition-transform group-open/m:rotate-180" />
-      </summary>
-      <ul className="mt-3 space-y-2">
-        {mv.map((m) => (
-          <li key={m.name} className="text-xs">
-            <span className="font-semibold">{m.name}</span> · <span className={tone(m.stance)}>{t(`st_${m.stance}` as Key)}</span>
-            <p className="text-muted-foreground">{lang === "ar" ? m.note_ar || m.note_en : m.note_en}</p>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-3 text-[11px] text-muted-foreground">{t("models_note")}</p>
-    </details>
-  );
-}
 
-function CtaLine({ s }: { s: Signal }) {
-  const { t, lang } = useI18n();
-  const line = (lang === "ar" ? s.cta_ar : s.cta_en) || s.cta_en || s.cta_ar;
-  return (
-    <a href="https://maaroofai.com" target="_blank" rel="noreferrer" className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-pulse/40 bg-pulse/10 p-3 text-sm transition-colors hover:bg-pulse/20">
-      <span>{line || t("go_maaroof")}</span>
-      <ArrowUpRight className="h-4 w-4 shrink-0 text-pulse rtl:-scale-x-100" />
-    </a>
-  );
+/** Keep one card per headline; prefer the user's own country over global. */
+export function dedupeSignals<T extends { title: string; title_ar?: string | null; region: string }>(list: T[]): T[] {
+  const m = new Map<string, T>();
+  for (const x of list) {
+    const k = (x.title || x.title_ar || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    if (!k) { m.set(Math.random().toString(), x); continue; }
+    const prev = m.get(k);
+    if (!prev || (prev.region === "global" && x.region !== "global")) m.set(k, x);
+  }
+  return [...m.values()];
 }

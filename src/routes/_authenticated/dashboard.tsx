@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SignalCard, PLATFORM_KEYS, type Signal } from "@/components/SignalCard";
+import { SignalCard, PLATFORM_KEYS, type Signal, dedupeSignals } from "@/components/SignalCard";
 import { RegionPicker } from "@/components/RegionPicker";
 import { ConnectivityCard } from "@/components/ConnectivityCard";
 import { useI18n, type Key } from "@/lib/i18n";
@@ -67,7 +67,7 @@ function Dashboard() {
 
   if (profile?.banned) return (<div className="min-h-screen"><SiteHeader /><p className="p-16 text-center">{t("banned")}</p></div>);
 
-  const list = ((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).slice().sort((a, b) => b.pulse_score - a.pulse_score);
+  const list = dedupeSignals((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).slice().sort((a, b) => b.pulse_score - a.pulse_score);
   return (
     <div className="min-h-screen">
       <SiteHeader />
@@ -182,12 +182,12 @@ function GeoIndex() {
   const [brand, setBrand] = useState("");
   const [market, setMarket] = useState("");
   const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState<{ overall: number; summary: string; cta?: string; models: { name: string; score: number; note: string }[] } | null>(null);
+  const [res, setRes] = useState<{ overall: number; models: { name: string; available: boolean; mentioned: boolean; excerpt: string; ms: number }[] } | null>(null);
   async function go(e: React.FormEvent) {
     e.preventDefault(); setBusy(true);
     try {
       const r = await check({ data: { brand, market, lang } });
-      if ("error" in r && r.error) toast.error(r.error); else if ("result" in r && r.result) setRes(r.result);
+      setRes(r.result);
     } catch (err) { toast.error(err instanceof Error ? err.message : "Error"); }
     setBusy(false);
   }
@@ -202,14 +202,19 @@ function GeoIndex() {
       {res && (
         <div className="mt-5 space-y-3 text-sm">
           <div className="flex items-baseline justify-between"><span className="text-muted-foreground">{t("d_overall")}</span><span className="font-display text-3xl font-bold text-pulse">{res.overall}</span></div>
-          <p className="text-muted-foreground">{res.summary}</p>
-          {res.models?.map((m) => (
-            <div key={m.name} title={m.note}>
-              <div className="flex justify-between text-xs"><span>{m.name}</span><span>{m.score}</span></div>
-              <div className="mt-1 h-1.5 rounded-full bg-muted"><div className="h-full rounded-full bg-pulse" style={{ width: `${m.score}%` }} /></div>
+          {res.models.map((m) => (
+            <div key={m.name} className="rounded-xl border border-border p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold">{m.name}</span>
+                <span className={m.available ? (m.mentioned ? "text-pulse" : "text-muted-foreground") : "text-muted-foreground"}>
+                  {!m.available ? t("geo_unavailable") : m.mentioned ? t("geo_mentioned") : t("geo_absent")}
+                  {m.available && <span className="ms-2 text-muted-foreground">{(m.ms / 1000).toFixed(1)}s</span>}
+                </span>
+              </div>
+              {m.available && m.excerpt && <p className="mt-2 text-xs text-muted-foreground">“{m.excerpt}…”</p>}
             </div>
           ))}
-          {res.cta && <a href="https://maaroofai.com" target="_blank" rel="noreferrer" className="block rounded-xl border border-pulse/40 bg-pulse/10 p-3 hover:bg-pulse/20">{res.cta}</a>}
+          <a href="https://maaroofai.com" target="_blank" rel="noreferrer" className="block text-xs text-muted-foreground hover:text-foreground">{t("geo_full10")}</a>
         </div>
       )}
     </div>
