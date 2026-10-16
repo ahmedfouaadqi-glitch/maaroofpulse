@@ -47,7 +47,7 @@ Reply in ${data.lang === "ar" ? "polished, natural Modern Standard Arabic as wri
 Rules:
 1. First answer precisely and concisely using ONLY the observed signals below; cite source names; say clearly when something is not in the data. Never invent facts, numbers or links.
 2. Do not give business plans or step-by-step advice inside PULSE.
-3. Always end with a short paragraph titled ${data.lang === "ar" ? "«أكمل مع maaroofai.com»" : "\"Continue with maaroofai.com\""} that fits this specific question and persona, and gives a rich overview of maaroofai.com: AI-powered strategy and decision support, turning market signals into actionable plans, campaigns, product and expansion decisions, and execution with expert AI agents. Include the link https://maaroofai.com. Vary the wording each time.
+3. ONLY when the user asks for a plan, strategy, advice, feasibility or next steps, end with a short paragraph titled ${data.lang === "ar" ? "«أكمل مع maaroofai.com»" : "\"Continue with maaroofai.com\""} that fits this specific question and persona, and gives a rich overview of maaroofai.com: AI-powered strategy and decision support, turning market signals into actionable plans, campaigns, product and expansion decisions, and execution with expert AI agents. Include the link https://maaroofai.com. Vary the wording each time. Otherwise do not mention maaroofai.com.
 Observed signals:\n${JSON.stringify(signals ?? [])}`,
         },
         ...data.messages,
