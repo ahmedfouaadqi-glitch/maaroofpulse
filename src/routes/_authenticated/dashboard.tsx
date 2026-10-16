@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SignalCard, PLATFORM_KEYS, type Signal } from "@/components/SignalCard";
+import { SignalCard, PLATFORM_KEYS, type Signal, dedupeSignals } from "@/components/SignalCard";
 import { RegionPicker } from "@/components/RegionPicker";
 import { ConnectivityCard } from "@/components/ConnectivityCard";
 import { useI18n, type Key } from "@/lib/i18n";
@@ -67,7 +67,7 @@ function Dashboard() {
 
   if (profile?.banned) return (<div className="min-h-screen"><SiteHeader /><p className="p-16 text-center">{t("banned")}</p></div>);
 
-  const list = ((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).slice().sort((a, b) => b.pulse_score - a.pulse_score);
+  const list = dedupeSignals((canViewFull ? signals.data : limited.data) ?? []).filter((x) => platform === "all" || x.platform === platform).slice().sort((a, b) => b.pulse_score - a.pulse_score);
   return (
     <div className="min-h-screen">
       <SiteHeader />
