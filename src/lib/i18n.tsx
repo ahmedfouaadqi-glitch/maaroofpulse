@@ -35,7 +35,7 @@ const dict = {
     teaser_lock_sub: "Create a free account to see every signal, event maps, registration links, why it's rising and lead time.",
     feat1_t: "Events near you", feat1_d: "Upcoming events with direct Google Maps and registration links.",
     feat2_t: "Fastest-growing apps", feat2_d: "The apps gaining ground in your region, and the reasons behind the climb.",
-    feat3_t: "AI visibility index", feat3_d: "How present your brand is across 10 AI assistants — DeepSeek, ChatGPT, Gemini, Claude, Perplexity, Copilot, Grok, Mistral, Kimi, Qwen.",
+    feat3_t: "AI visibility index", feat3_d: "How present your brand is across 3 AI assistants — ChatGPT, Gemini and Claude. You can go to maaroofai.com to reach 10 AI models.",
     feat4_t: "Your smart assistant", feat4_d: "Ask anything about the current pulse and get grounded, practical answers.",
     plans_title: "Simple plans", per_month: "/mo", choose: "Get started",
     footer: "Built for founders, marketers and teams who move first.",
