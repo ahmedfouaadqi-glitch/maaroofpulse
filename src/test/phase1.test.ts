@@ -64,8 +64,9 @@ describe("API Direct", () => {
     expect(await apiDirectFetch("anything")).toBeNull();
     expect(f).not.toHaveBeenCalled();
   });
-  it("stays blocked (unverified) even with a key", () => {
+  it("enabled with a key; generic fetch still returns no mock data", async () => {
     process.env["APIDIRECT_API_KEY"] = "x";
-    expect(apiDirectStatus().state).toBe("blocked");
+    expect(apiDirectStatus().state).toBe("enabled");
+    expect(await apiDirectFetch("anything")).toBeNull();
   });
 });
