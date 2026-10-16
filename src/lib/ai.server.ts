@@ -14,6 +14,7 @@ export async function aiComplete(
 ): Promise<string> {
   const key = process.env["LOVABLE_API_KEY"];
   if (!key) throw new AiError(401, "AI is not configured");
+  if ((opts.model ?? "").startsWith("anthropic/")) return claudeComplete(key, messages, opts.model!);
   const res = await fetch(GATEWAY, {
     method: "POST",
     headers: {
@@ -76,4 +77,30 @@ export function parseJson<T>(text: string): T | null {
       return null;
     }
   }
+}
+
+/** Claude only works on the native Messages endpoint. */
+async function claudeComplete(key: string, messages: { role: string; content: string }[], model: string): Promise<string> {
+  const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, "X-Lovable-AIG-SDK": "fetch" },
+    body: JSON.stringify({ model, max_tokens: 8000, stream: true, system: system || undefined,
+      messages: messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })) }),
+  });
+  if (!res.ok || !res.body) throw new AiError(res.status, (await res.text().catch(() => "")).slice(0, 300) || `Claude failed (${res.status})`);
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ""; let out = "";
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n"); buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim(); if (!t.startsWith("data:")) continue;
+      try { const j = JSON.parse(t.slice(5).trim());
+        if (j.type === "content_block_delta" && j.delta?.type === "text_delta") out += j.delta.text;
+        if (j.type === "message_delta" && j.delta?.stop_reason === "refusal") throw new AiError(403, "refused");
+      } catch (e) { if (e instanceof AiError) throw e; }
+    }
+  }
+  return out;
 }

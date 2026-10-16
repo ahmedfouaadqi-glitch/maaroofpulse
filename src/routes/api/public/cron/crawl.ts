@@ -31,7 +31,7 @@ export const Route = createFileRoute("/api/public/cron/crawl")({
           await renewLock(LOCK, runId);
           const translated = await backfillArabic(10).catch(() => 0);
           const searched = await searchSweep().catch(() => 0);
-          const analyzed = await analyzeWithModels(6).catch(() => 0);
+          const analyzed = await analyzeWithModels(Number((await supabaseAdmin.from("app_settings").select("value").eq("key", "models_max_per_cycle").maybeSingle()).data?.value ?? 60), { runId, lockName: LOCK, deadline: Date.now() + 120_000 }).catch(() => 0);
 
           const { data: usage } = await supabaseAdmin.from("api_usage_logs").select("provider,status,cost_amount,cost_type,cost_unit").eq("run_id", runId);
           const providers: Record<string, { ok: number; failed: number; actual: number; estimated: number; unit: string }> = {};

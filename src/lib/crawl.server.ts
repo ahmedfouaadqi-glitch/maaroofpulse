@@ -10,7 +10,7 @@ const PLATFORMS = ["x", "youtube", "tiktok", "instagram", "facebook", "threads",
 export const READ_MODELS = [
   { name: "Gemini", model: "google/gemini-2.5-flash" },
   { name: "ChatGPT", model: "openai/gpt-5-mini" },
-  { name: "Claude", model: "anthropic/claude-sonnet-4-5" },
+  { name: "Claude", model: "anthropic/claude-sonnet-5" },
 ];
 
 /** App chart group derived from the source itself (never guessed by AI). */
@@ -191,30 +191,45 @@ export async function backfillArabic(limit = 15) {
 }
 
 /** Real readings: each model is called separately; failures are stored as unavailable. */
-export async function analyzeWithModels(limit = 6) {
+type Reading = { name: string; available: boolean; stance: string; note_en: string; note_ar: string };
+/** Every signal gets a reading from each of the three models; failed models retry next cycle. */
+export async function analyzeWithModels(cap = 60, opts: { runId?: string; lockName?: string; deadline?: number } = {}) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: rows } = await supabaseAdmin.from("signals").select("id,kind,title,summary,region,source_name").is("models_view", null).order("created_at", { ascending: false }).limit(limit);
-  if (!rows?.length) return 0;
+  const { data: rows } = await supabaseAdmin.from("signals").select("id,kind,title,summary,region,source_name,models_view")
+    .order("created_at", { ascending: false }).limit(400);
+  const pending = (rows ?? []).filter((r) => {
+    const v = r.models_view as Reading[] | null;
+    return !Array.isArray(v) || READ_MODELS.some((m) => !v.find((x) => x.name === m.name && x.available));
+  }).slice(0, cap);
   const sys = `You read factual monitoring signals. For each item give your own short reading: how strong and credible the signal looks and how widely it may spread. Describe only — no advice, no recommendations, no links, no brand promotion. Never use the words استخبارات or استخبار.
-Return JSON {"items":[{"id","stance":"agree"|"caution"|"neutral","note_en","note_ar"}]} where note_en is ONE English sentence and note_ar is ONE sentence of native, polished editorial Arabic (not a translation).`;
-  const payload = JSON.stringify(rows.map((r) => ({ id: r.id, kind: r.kind, title: r.title, summary: r.summary, region: r.region, source: r.source_name })));
-  const results = await Promise.all(READ_MODELS.map(async (m) => {
-    try {
-      const text = await aiComplete([{ role: "system", content: sys }, { role: "user", content: payload }], { model: m.model, json: true });
-      const items = parseJson<{ items?: { id: string; stance?: string; note_en?: string; note_ar?: string }[] }>(text)?.items ?? [];
-      return { m, items, ok: items.length > 0 };
-    } catch { return { m, items: [], ok: false }; }
-  }));
-  if (!results.some((r) => r.ok)) return 0;
+Return json {"items":[{"id","stance":"agree"|"caution"|"neutral","note_en","note_ar"}]} where note_en is ONE English sentence and note_ar is ONE sentence of native, polished editorial Arabic (not a translation).`;
   let n = 0;
-  for (const r of rows) {
-    const view = results.map(({ m, items, ok }) => {
-      const it = items.find((x) => x?.id === r.id);
-      if (!ok || !it?.note_en) return { name: m.name, available: false, stance: "neutral", note_en: "", note_ar: "" };
-      return { name: m.name, available: true, stance: ["agree", "caution", "neutral"].includes(it.stance ?? "") ? it.stance : "neutral", note_en: String(it.note_en).slice(0, 240), note_ar: String(it.note_ar ?? "").slice(0, 240) };
-    });
-    await supabaseAdmin.from("signals").update({ models_view: view as any }).eq("id", r.id);
-    n++;
+  for (let i = 0; i < pending.length; i += 10) {
+    if (opts.deadline && Date.now() > opts.deadline) break;
+    const batch = pending.slice(i, i + 10);
+    const payload = JSON.stringify(batch.map((r) => ({ id: r.id, kind: r.kind, title: r.title, summary: r.summary, region: r.region, source: r.source_name })));
+    const results = await Promise.all(READ_MODELS.map(async (m) => {
+      const t0 = Date.now();
+      try {
+        const text = await aiComplete([{ role: "system", content: sys }, { role: "user", content: payload }], { model: m.model, json: !m.model.startsWith("anthropic/") });
+        const items = parseJson<{ items?: { id: string; stance?: string; note_en?: string; note_ar?: string }[] }>(text)?.items ?? [];
+        await logUsage({ run_id: opts.runId, provider: "ai_gateway", capability: `readings:${m.name}`, status: items.length ? "ok" : "error", duration_ms: Date.now() - t0, unit: "usd_cents" });
+        return { m, items };
+      } catch (e) {
+        await logUsage({ run_id: opts.runId, provider: "ai_gateway", capability: `readings:${m.name}`, status: "error", duration_ms: Date.now() - t0, error: String(e), unit: "usd_cents" });
+        return { m, items: [] as { id: string; stance?: string; note_en?: string; note_ar?: string }[] };
+      }
+    }));
+    for (const r of batch) {
+      const prev = (Array.isArray(r.models_view) ? r.models_view : []) as Reading[];
+      const view: Reading[] = READ_MODELS.map((m) => {
+        const it = results.find((x) => x.m.name === m.name)?.items.find((x) => x?.id === r.id);
+        if (it?.note_en) return { name: m.name, available: true, stance: ["agree", "caution", "neutral"].includes(it.stance ?? "") ? it.stance! : "neutral", note_en: String(it.note_en).slice(0, 240), note_ar: String(it.note_ar ?? "").slice(0, 240) };
+        return prev.find((x) => x.name === m.name && x.available) ?? { name: m.name, available: false, stance: "neutral", note_en: "", note_ar: "" };
+      });
+      if (view.some((v) => v.available)) { await supabaseAdmin.from("signals").update({ models_view: view as any }).eq("id", r.id); n++; }
+    }
+    if (opts.runId && opts.lockName) await renewLock(opts.lockName, opts.runId);
   }
   return n;
 }
