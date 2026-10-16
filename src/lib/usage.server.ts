@@ -6,9 +6,9 @@ async function admin() {
 }
 
 export type UsageRow = {
-  run_id?: string | null; provider: string; capability: string; status: string;
-  http_status?: number | null; duration_ms?: number; retry_count?: number;
-  reported_cost?: unknown; estimate?: number; free?: boolean; unit?: "credits" | "usd_cents"; error?: string;
+  run_id?: string | null | undefined; provider: string; capability: string; status: string;
+  http_status?: number | null | undefined; duration_ms?: number | undefined; retry_count?: number | undefined;
+  reported_cost?: unknown; estimate?: number | undefined; free?: boolean | undefined; unit?: "credits" | "usd_cents" | undefined; error?: string | undefined;
 };
 
 export async function logUsage(u: UsageRow) {

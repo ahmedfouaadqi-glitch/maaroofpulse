@@ -13,7 +13,7 @@ export function isHorizon(s: { momentum: string; lead_time_hours?: number | null
 
 export type CostType = "actual" | "estimated" | "free";
 /** Cost is "actual" only when the provider response itself reports it. */
-export function classifyCost(opts: { reported?: unknown; estimate?: number; free?: boolean }): { amount: number; type: CostType; basis: string } {
+export function classifyCost(opts: { reported?: unknown; estimate?: number | undefined; free?: boolean | undefined }): { amount: number; type: CostType; basis: string } {
   if (opts.free) return { amount: 0, type: "free", basis: "provider documents this call as free" };
   const r = Number(opts.reported);
   if (opts.reported != null && Number.isFinite(r) && r >= 0) return { amount: r, type: "actual", basis: "reported by provider response" };
