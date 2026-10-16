@@ -205,8 +205,8 @@ export async function searchSweep() {
   const key = process.env["FIRECRAWL_API_KEY"];
   if (!key) return 0;
   const codes = Object.keys(SEARCH_REGIONS);
-  const region = codes[Math.floor(Date.now() / 300_000) % codes.length];
-  const place = SEARCH_REGIONS[region];
+  const region = codes[Math.floor(Date.now() / 300_000) % codes.length]!;
+  const place = SEARCH_REGIONS[region]!;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   let created = 0;
   for (const [kind, query] of [["event", `upcoming events conferences exhibitions ${place} this month`], ["economy", `investment funding economy news ${place}`]] as const) {
