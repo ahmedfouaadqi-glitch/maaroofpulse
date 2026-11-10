@@ -27,6 +27,10 @@ This project was built with [Lovable](https://lovable.dev).
 
 **Live app**: https://maaroofpulse.lovable.app
 
+## Agent skills
+
+The repository includes reusable, project-specific agent workflows for deep source research, page-change monitoring, social trend analysis, evidence verification, and connector governance. See [`skills/README.md`](./skills/README.md) for the skill index, Manus capability mapping, and source references. These skills guide research and development; they do not themselves add provider integrations or access credentials.
+
 ## Build with Lovable
 
 Continue developing this project in the [Lovable editor](https://lovable.dev/projects/fe264e07-b828-4233-b3ab-d3fac0ce79b6).
